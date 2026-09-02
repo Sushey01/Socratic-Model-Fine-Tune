@@ -8,17 +8,21 @@ Re-run the same command to resume from the latest checkpoint.
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import sys
+import traceback
 from pathlib import Path
 
 import torch
 from datasets import Dataset
 from peft import LoraConfig
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainerCallback
 from transformers.trainer_utils import get_last_checkpoint
 from trl import SFTConfig, SFTTrainer
+
+from eval_scienceqa import EVAL_N, load_eval_slice, ngram_overlap, run_scienceqa_eval
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DATA = ROOT / "socratic_train.jsonl"
@@ -151,6 +155,143 @@ def push_output(output_dir: Path, repo_id: str, base_model: str) -> None:
     print(f"Pushed to https://huggingface.co/{repo_id}")
 
 
+def prompt_secret(env_name: str, prompt: str) -> str:
+    current = os.environ.get(env_name, "").strip()
+    if current:
+        return current
+    if not sys.stdin.isatty():
+        return ""
+    value = getpass.getpass(prompt).strip()
+    if value:
+        os.environ[env_name] = value
+    return value
+
+
+def prompt_line(env_name: str, prompt: str, default: str = "") -> str:
+    current = os.environ.get(env_name, "").strip()
+    if current and current != "YOUR_HF_USER/socratic-phi3":
+        return current
+    if not sys.stdin.isatty():
+        return current or default
+    suffix = f" [{default}]" if default else ""
+    value = input(f"{prompt}{suffix}: ").strip()
+    value = value or default
+    if value:
+        os.environ[env_name] = value
+    return value
+
+
+def ensure_runtime_secrets() -> None:
+    """Ask on the training PC if W&B or Hugging Face credentials are missing."""
+    prompt_secret(
+        "WANDB_API_KEY",
+        "Weights & Biases API key (wandb.ai/authorize, input hidden): ",
+    )
+    prompt_secret(
+        "HF_TOKEN",
+        "Hugging Face write token (huggingface.co/settings/tokens, input hidden): ",
+    )
+    if not os.environ.get("HUGGING_FACE_HUB_TOKEN"):
+        os.environ["HUGGING_FACE_HUB_TOKEN"] = os.environ.get("HF_TOKEN", "")
+    prompt_line(
+        "HF_HUB_REPO",
+        "Hugging Face model repo to push adapters",
+        default=os.environ.get("HF_HUB_REPO") or "Susu11/socratic-phi3",
+    )
+
+
+def wandb_enabled() -> bool:
+    return bool(os.environ.get("WANDB_API_KEY", "").strip())
+
+
+def init_wandb() -> None:
+    if not wandb_enabled():
+        print("WANDB_API_KEY still missing; ScienceQA metrics print in the terminal only.")
+        return
+    import wandb
+
+    wandb.login(key=os.environ["WANDB_API_KEY"], relogin=True)
+    wandb.init(
+        project=os.environ.get("WANDB_PROJECT", "socratic-phi3"),
+        name=os.environ.get("WANDB_RUN_NAME") or None,
+        config={
+            "base_model": os.environ.get("BASE_MODEL", DEFAULT_MODEL),
+            "eval_n": EVAL_N,
+            "benchmark": "ScienceQA natural science grades 3-10",
+        },
+    )
+    print(f"W&B run: {wandb.run.url if wandb.run else '(offline)'}")
+
+
+def log_scienceqa_to_wandb(metrics: dict, epoch: float, step: int) -> None:
+    examples = metrics.get("examples") or []
+    payload = {
+        "eval/scienceqa_acc": metrics["eval/scienceqa_acc"],
+        "eval/scienceqa_sri": metrics["eval/scienceqa_sri"],
+        "eval/n": metrics["eval/n"],
+        "epoch": epoch,
+    }
+    if wandb_enabled():
+        import wandb
+
+        if wandb.run is not None:
+            if examples:
+                payload["eval/scienceqa_examples"] = wandb.Table(
+                    columns=list(examples[0].keys()),
+                    data=[list(row.values()) for row in examples],
+                )
+            wandb.log(payload, step=step)
+            wandb.run.summary["eval/scienceqa_acc"] = metrics["eval/scienceqa_acc"]
+            wandb.run.summary["eval/scienceqa_sri"] = metrics["eval/scienceqa_sri"]
+
+
+class ScienceQAEpochCallback(TrainerCallback):
+    def __init__(self, tokenizer, train_jsonl: Path):
+        self.tokenizer = tokenizer
+        self.train_jsonl = train_jsonl
+        self.items: list | None = None
+
+    def _ensure_items(self):
+        if self.items is None:
+            self.items = load_eval_slice()
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        try:
+            self._ensure_items()
+            overlap = ngram_overlap([x["question"] for x in self.items], self.train_jsonl)
+            print(f"ScienceQA vs train jsonl 5-gram overlap: {overlap:.4f}")
+            if wandb_enabled():
+                import wandb
+
+                if wandb.run is not None:
+                    wandb.summary["eval/ngram_overlap"] = overlap
+                    wandb.summary["eval/n"] = len(self.items)
+        except Exception as exc:
+            traceback.print_exc()
+            print(f"ScienceQA eval setup failed ({exc}); skipping per-epoch benchmark.")
+            self.items = []
+        return control
+
+    def on_epoch_end(self, args, state, control, model=None, **kwargs):
+        if not self.items or model is None:
+            return control
+        print(f"Running ScienceQA eval after epoch {state.epoch:.0f} ({len(self.items)} items)...")
+        try:
+            metrics = run_scienceqa_eval(model, self.tokenizer, self.items)
+        except Exception as exc:
+            traceback.print_exc()
+            print(f"ScienceQA eval failed: {exc}")
+            return control
+        epoch = float(state.epoch)
+        print(
+            f"ScienceQA epoch={epoch:.0f} acc={metrics['eval/scienceqa_acc']:.4f} "
+            f"sri={metrics['eval/scienceqa_sri']:.4f} n={int(metrics['eval/n'])}"
+        )
+        log_scienceqa_to_wandb(metrics, epoch, state.global_step)
+        model.train()
+        return control
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Socratic Phi-3 LoRA fine-tune")
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA)
@@ -178,6 +319,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    ensure_runtime_secrets()
+    if not args.push_to_hub:
+        args.push_to_hub = os.environ.get("HF_HUB_REPO", "")
 
     if not torch.cuda.is_available():
         raise SystemExit(
@@ -235,7 +379,7 @@ def main() -> None:
         max_grad_norm=0.3,
         max_steps=-1,
         lr_scheduler_type="constant",
-        report_to="none",
+        report_to="wandb" if wandb_enabled() else "none",
         max_length=args.max_length,
         packing=False,
         save_strategy="steps",
@@ -259,11 +403,14 @@ def main() -> None:
 
     dataset = dataset.map(to_text, remove_columns=[c for c in dataset.column_names if c != "text"])
 
+    init_wandb()
+
     trainer_kwargs = {
         "model": model,
         "train_dataset": dataset,
         "peft_config": lora_config,
         "args": training_arguments,
+        "callbacks": [ScienceQAEpochCallback(tokenizer, args.data)],
     }
     try:
         trainer = SFTTrainer(processing_class=tokenizer, **trainer_kwargs)
@@ -281,11 +428,26 @@ def main() -> None:
     if last:
         print(f"Latest resume checkpoint: {last}")
 
-    repo_id = (args.push_to_hub or "").strip()
-    if repo_id:
+    repo_id = (args.push_to_hub or os.environ.get("HF_HUB_REPO") or "").strip()
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or ""
+    if repo_id and not token:
+        token = prompt_secret(
+            "HF_TOKEN",
+            "Hugging Face write token required to push the model (input hidden): ",
+        )
+    if repo_id and token:
+        os.environ["HF_TOKEN"] = token
         push_output(args.output_dir, repo_id, args.model)
+    elif repo_id:
+        print("Skipping Hub upload: no HF_TOKEN after prompt.")
     else:
         print("Skipping Hub upload (set HF_HUB_REPO or --push-to-hub).")
+
+    if wandb_enabled():
+        import wandb
+
+        if wandb.run is not None:
+            wandb.finish()
 
 
 if __name__ == "__main__":

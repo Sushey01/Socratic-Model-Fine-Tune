@@ -10,7 +10,15 @@ Fine-tune Phi-3 as a Grade 10 Socratic science tutor using [socratic_train.jsonl
 git clone https://github.com/Sushey01/Socratic-Model-Fine-Tune.git && cd Socratic-Model-Fine-Tune && bash start.sh
 ```
 
-Put Hub settings in **local `.env` only**. `bash start.sh` sources that file and passes `HF_TOKEN` into `hf upload` / `train.py`. You do **not** run `hf auth login` for this project (that uses a different stored token and caused the “not found / invalid token” errors). Never commit `.env` or paste the token into chat.
+Put Hub and W&B settings in **local `.env`**. If a key is missing, **`bash start.sh` asks for it** (hidden input) and writes `.env`. You do not need `hf auth login` or `wandb login` separately.
+
+**One command on the training PC (NVIDIA GPU):**
+
+```bash
+bash start.sh
+```
+
+That run: SFT → ScienceQA after each epoch → W&B charts → push LoRA to Hugging Face.
 
 ```bash
 bash start.sh --fresh                 # ignore old checkpoints
@@ -27,6 +35,8 @@ Keep a local `.env` (gitignored). Do **not** commit it. On the college PC, creat
 | `HF_DATASET_REPO` | `Susu11/socraticfinetune` | JSONL via `hf upload … --repo-type=dataset` |
 | `HF_HUB_REPO` | `Susu11/socratic-phi3` | Adapters + **latest** checkpoint after train |
 | `HF_TOKEN` | `hf_...` **without a `#` in front** | Write token; `start.sh` reads this automatically |
+| `WANDB_API_KEY` | from wandb.ai | Logs ScienceQA after every epoch |
+| `WANDB_PROJECT` | `socratic-phi3` | W&B project name (optional) |
 
 `HF_TOKEN=...` must be an active line. A leading `#` means “comment” and the script cannot see it.
 
@@ -60,3 +70,9 @@ git pull && bash start.sh --download-checkpoints
 Do not merge/quantize inside the default train command (easy OOM). When LoRA is done: `bash start.sh --gguf` prints merge → llama.cpp convert/quantize → upload to the same `HF_HUB_REPO`.
 
 `socratic_train_data.jsonl` is an older instruction-format file and is not used by `train.py`.
+
+## ScienceQA benchmark (W&B)
+
+See **[BENCHMARK.md](BENCHMARK.md)** for dataset choice, metrics (accuracy + SRI), and W&B keys.
+
+After **each training epoch**, `train.py` scores a fixed **256-item** slice of [ScienceQA](https://huggingface.co/datasets/derek-thomas/ScienceQA) (natural science, grades 3–10) and logs `eval/scienceqa_acc`, `eval/scienceqa_sri`, and `eval/ngram_overlap` when `WANDB_API_KEY` is in `.env`.
