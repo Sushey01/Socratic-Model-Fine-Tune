@@ -59,21 +59,20 @@ Keep a local `.env` (gitignored). Do **not** commit it. On the college PC, creat
 | Variable | Example | What |
 | --- | --- | --- |
 | `HF_DATASET_REPO` | `Susu11/socraticfinetune` | JSONL via Python Hub API |
-| `HF_HUB_REPO` | `Susu11/socratic-phi3` | Adapters + **latest** checkpoint after train |
+| `HF_HUB_REPO` | `Susu11/socratic-phi3` | **Final** LoRA adapters after train (not step checkpoints) |
 | `HF_TOKEN` | `hf_...` **without a `#` in front** | Write token; `start.py` reads `.env` |
 | `WANDB_API_KEY` | from wandb.ai | Logs ScienceQA after every epoch |
 | `WANDB_PROJECT` | `socratic-phi3` | W&B project name (optional) |
 
 `HF_TOKEN=...` must be an active line. A leading `#` means “comment” and the script cannot see it.
 
-**Do not put the Phi-3 model or LoRA files in this GitHub folder.** `train.py` downloads [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) automatically. Checkpoints stay in `socratic_finetuned_model/` (gitignored) and on Hugging Face.
+**Do not put the Phi-3 model or LoRA files in this GitHub folder.** `train.py` downloads [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) automatically. Step checkpoints stay in `socratic_finetuned_model/` on the training PC (gitignored). Hugging Face only receives the **finished** adapters.
 
 After train, the **model** repo contains:
 
 | Layer | What | Use |
 | --- | --- | --- |
 | Deploy | PEFT adapters + tokenizer at **repo root** | Load LoRA on [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) |
-| Resume | **Only the latest** `checkpoint-N` (e.g. step 500 if you save every 100) | Continue training; you do not need checkpoint-100 if 500 exists |
 | GGUF | `gguf/*.gguf` **later** | llama.cpp / Ollama after `bash start.sh --gguf` |
 
 Linked cards:
@@ -81,11 +80,13 @@ Linked cards:
 - Notebook / MLX 4-bit: [Oscilla/Phi-3.5-mini-instruct-mlx-4Bit](https://huggingface.co/Oscilla/Phi-3.5-mini-instruct-mlx-4Bit)
 - CUDA train base: [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct)
 
-The Hub repo is created **private**. Locally, snapshots still write every 100 steps and keep the last 3 folders; only the newest checkpoint is uploaded.
+The Hub repo is created **private**. Local snapshots still write every 100 steps and keep the last 3 folders **on that PC only**.
 
 ## Checkpoints
 
-`checkpoint-500` is the model at step 500. Inference uses those adapters (or the final root save). Resume starts at step 501. A crash at 450 resumes from 400 (last completed save).
+`checkpoint-500` is the model at step 500 **on the training disk**. Inference of the published model uses the final root save on Hugging Face. Resume on the same PC starts at the next step after the last local save. A crash at 450 resumes from 400.
+
+To copy the **final** adapters to another machine:
 
 ```bash
 git pull && bash start.sh --download-checkpoints

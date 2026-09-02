@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fine-tune Phi-3-mini on the Socratic Grade 10 chat dataset.
 
-Checkpoints are written under OUTPUT_DIR (default ./socratic_finetuned_model).
-Re-run the same command to resume from the latest checkpoint.
+Checkpoints are written under OUTPUT_DIR (default ./socratic_finetuned_model) on this machine only.
+Hugging Face gets the final LoRA adapters after training finishes. Re-run to resume from the latest local checkpoint.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import argparse
 import getpass
 import json
 import os
+import re
 import sys
 import traceback
 from pathlib import Path
@@ -67,8 +68,6 @@ def resolve_checkpoint(output_dir: Path, resume: bool) -> str | None:
 
 
 def write_model_card(output_dir: Path, repo_id: str, base_model: str) -> None:
-    last = get_last_checkpoint(str(output_dir))
-    last_name = Path(last).name if last else "none"
     card = f"""---
 library_name: peft
 base_model: {base_model}
@@ -85,11 +84,11 @@ Grade 10 Socratic science tutor LoRA. **GitHub** holds code and data; **this Hub
 
 ## What is in this repo
 
-1. **Deploy (repo root):** PEFT adapters + tokenizer. Load with `PeftModel.from_pretrained("{repo_id}")` on top of `{base_model}`.
-2. **Resume:** only the **latest** Trainer folder (`{last_name}`). Continue with `bash start.sh --download-checkpoints` then `bash start.sh`.
+1. **Deploy (repo root):** final PEFT adapters + tokenizer after training finishes. Load with `PeftModel.from_pretrained("{repo_id}")` on top of `{base_model}`.
+2. **Resume:** Trainer `checkpoint-*` folders stay on the training PC (`socratic_finetuned_model/`). They are not uploaded.
 3. **GGUF (later):** after fine-tune, `bash start.sh --gguf` (merge + llama.cpp quant). Not uploaded during training.
 
-Older `checkpoint-*` folders are not kept on the Hub. Local training still snapshots every 100 steps and keeps the last 3 on disk.
+Local training still snapshots every 100 steps and keeps the last 3 checkpoint folders on disk.
 
 ## Linked models
 
@@ -121,10 +120,8 @@ def push_output(output_dir: Path, repo_id: str, base_model: str) -> None:
     api.create_repo(repo_id, exist_ok=True, repo_type="model", private=True)
 
     write_model_card(output_dir, repo_id, base_model)
-    last = get_last_checkpoint(str(output_dir))
-    last_name = Path(last).name if last else None
 
-    print(f"Uploading adapters + tokenizer (repo root) to {repo_id}")
+    print(f"Uploading final adapters + tokenizer (no checkpoints) to {repo_id}")
     api.upload_folder(
         folder_path=str(output_dir),
         repo_id=repo_id,
@@ -137,22 +134,11 @@ def push_output(output_dir: Path, repo_id: str, base_model: str) -> None:
             "*.tmp",
         ],
     )
+    for name in _hub_checkpoint_names(api, repo_id):
+        print(f"Removing Hub checkpoint leftover {name} (checkpoints stay local only)")
+        api.delete_folder(repo_id=repo_id, path_in_repo=name, repo_type="model")
 
-    if last:
-        print(f"Uploading latest checkpoint only: {last_name}")
-        api.upload_folder(
-            folder_path=last,
-            path_in_repo=last_name,
-            repo_id=repo_id,
-            repo_type="model",
-            ignore_patterns=["rng_state*", "*.tmp"],
-        )
-        for name in _hub_checkpoint_names(api, repo_id):
-            if name != last_name:
-                print(f"Removing old Hub checkpoint {name}")
-                api.delete_folder(repo_id=repo_id, path_in_repo=name, repo_type="model")
-
-    print(f"Pushed to https://huggingface.co/{repo_id}")
+    print(f"Pushed final model to https://huggingface.co/{repo_id}")
 
 
 def prompt_secret(env_name: str, prompt: str) -> str:
@@ -292,6 +278,24 @@ class ScienceQAEpochCallback(TrainerCallback):
         return control
 
 
+def make_sft_config(**kwargs) -> SFTConfig:
+    """Drop kwargs this installed TRL SFTConfig does not accept (e.g. save_safetensors)."""
+    dropped: list[str] = []
+    while True:
+        try:
+            cfg = SFTConfig(**kwargs)
+            if dropped:
+                print(f"SFTConfig ignored unsupported args: {', '.join(dropped)}")
+            return cfg
+        except TypeError as exc:
+            match = re.search(r"unexpected keyword argument '([^']+)'", str(exc))
+            if not match or match.group(1) not in kwargs:
+                raise
+            key = match.group(1)
+            dropped.append(key)
+            kwargs.pop(key)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Socratic Phi-3 LoRA fine-tune")
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA)
@@ -311,7 +315,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--push-to-hub",
         default=os.environ.get("HF_HUB_REPO", ""),
-        help="HF repo id (or set HF_HUB_REPO). Uploads adapters plus the latest checkpoint only.",
+        help="HF repo id (or set HF_HUB_REPO). Uploads the final LoRA adapters only; checkpoints stay local.",
     )
     return parser.parse_args()
 
@@ -349,13 +353,17 @@ def main() -> None:
             bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_use_double_quant=True,
         )
-        model = AutoModelForCausalLM.from_pretrained(args.model, **load_kw)
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model, attn_implementation="eager", **load_kw
+        )
     except Exception as exc:
         print(f"4-bit bitsandbytes load failed ({exc}); retrying fp16 without 4-bit.")
         use_bnb = False
         load_kw.pop("quantization_config", None)
         torch_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch_dtype, **load_kw)
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model, torch_dtype=torch_dtype, attn_implementation="eager", **load_kw
+        )
 
     lora_config = LoraConfig(
         r=8,
@@ -368,7 +376,7 @@ def main() -> None:
 
     use_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
 
-    training_arguments = SFTConfig(
+    training_arguments = make_sft_config(
         output_dir=str(args.output_dir),
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
