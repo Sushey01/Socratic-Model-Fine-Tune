@@ -1,0 +1,19 @@
+[project]
+name = "socratic-model-fine-tune"
+version = "0.1.0"
+description = "Fine-tune Phi-3-mini as a Grade 10 Socratic science tutor"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "accelerate>=1.0.0",
+    "bitsandbytes>=0.44.0",
+    "datasets>=3.0.0",
+    "huggingface_hub>=0.26.0",
+    "peft>=0.13.0",
+    "torch>=2.4.0",
+    "transformers>=4.46.0",
+    "trl>=0.12.0",
+]
+
+[tool.uv]
+package = false
