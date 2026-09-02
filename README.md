@@ -36,6 +36,16 @@ WANDB_PROJECT=socratic-phi3
 
 Do not put a raw token on its own line. Do not `source .env` in Git Bash.
 
+**Windows:** `uv` picked Python **3.14** (CPU-only torch). This repo pins **3.12**. After `git pull`:
+
+```powershell
+cd $HOME\Socratic-Model-Fine-Tune
+nvidia-smi
+uv run python start.py
+```
+
+Confirm `torch.cuda.is_available()` becomes True. If `nvidia-smi` works but CUDA is still False, train in **WSL2** or on a Linux GPU box (`bitsandbytes` is unreliable on native Windows).
+
 **One run:** SFT → ScienceQA after each epoch → W&B → push LoRA (Python Hub API, not `hf`).
 
 ```bash

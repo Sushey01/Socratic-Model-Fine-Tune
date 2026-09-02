@@ -3,7 +3,7 @@ name = "socratic-model-fine-tune"
 version = "0.1.0"
 description = "Fine-tune Phi-3-mini as a Grade 10 Socratic science tutor"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "accelerate>=1.0.0",
     "bitsandbytes>=0.44.0",

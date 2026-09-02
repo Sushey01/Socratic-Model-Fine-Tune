@@ -129,32 +129,60 @@ def _python() -> list[str]:
 
 def run(args: list[str]) -> None:
     print("+", " ".join(args), flush=True)
-    subprocess.check_call(args, cwd=str(ROOT))
+    try:
+        subprocess.check_call(args, cwd=str(ROOT))
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(exc.returncode) from None
 
 
 def sync_deps() -> None:
     uv = shutil.which("uv")
     if uv:
-        print("Installing Python dependencies with uv...")
+        print("Installing Python 3.12 env and dependencies with uv...")
+        run([uv, "python", "pin", "3.12"])
         run([uv, "sync"])
         return
     print("uv not found; using current Python:", sys.executable)
 
 
+def cuda_ok() -> bool:
+    return subprocess.call(_python() + ["-c", "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)"], cwd=str(ROOT)) == 0
+
+
 def maybe_cuda_wheel() -> None:
-    code = (
-        "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)"
+    if cuda_ok():
+        print("PyTorch CUDA is available.")
+        return
+    print("PyTorch has no CUDA. Installing a CUDA 12.4 wheel for Python 3.12...")
+    uv = shutil.which("uv")
+    if not uv:
+        print("Install uv, or: pip install torch --index-url https://download.pytorch.org/whl/cu124", file=sys.stderr)
+        return
+    subprocess.call(
+        [
+            uv,
+            "pip",
+            "install",
+            "torch",
+            "--index-url",
+            "https://download.pytorch.org/whl/cu124",
+        ],
+        cwd=str(ROOT),
     )
-    try:
-        subprocess.check_call(_python() + ["-c", code], cwd=str(ROOT))
-    except subprocess.CalledProcessError:
-        print("PyTorch has no CUDA. Trying CUDA 12.4 wheel...")
-        uv = shutil.which("uv")
-        if uv:
-            subprocess.call(
-                [uv, "pip", "install", "torch", "--index-url", "https://download.pytorch.org/whl/cu124"],
-                cwd=str(ROOT),
-            )
+    if cuda_ok():
+        print("PyTorch CUDA is available after wheel install.")
+        return
+    print(
+        "Still no CUDA. On Windows, NVIDIA + Python 3.12 CUDA torch is required.\n"
+        "In this folder run:\n"
+        "  nvidia-smi\n"
+        "  uv python pin 3.12\n"
+        "  uv sync\n"
+        "  uv pip install torch --index-url https://download.pytorch.org/whl/cu124\n"
+        "  uv run python -c \"import torch; print(torch.__version__, torch.cuda.is_available())\"\n"
+        "If nvidia-smi works but torch.cuda is False, use WSL2 Ubuntu or a Linux GPU machine.",
+        file=sys.stderr,
+    )
 
 
 def main() -> None:
