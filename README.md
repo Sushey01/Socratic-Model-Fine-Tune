@@ -2,30 +2,46 @@
 
 Fine-tune Phi-3 as a Grade 10 Socratic science tutor using [socratic_train.jsonl](socratic_train.jsonl).
 
-**GitHub** = code and `start.sh`. **Hugging Face dataset** [Susu11/socraticfinetune](https://huggingface.co/datasets/Susu11/socraticfinetune) = JSONL. **Hugging Face model** (`HF_HUB_REPO`) = LoRA adapters, latest checkpoint, GGUF later.
+**GitHub** = code. **Hugging Face dataset** [Susu11/socraticfinetune](https://huggingface.co/datasets/Susu11/socraticfinetune) = JSONL. **Hugging Face model** (`HF_HUB_REPO`) = LoRA adapters.
 
-## Clone and run (other PC)
+## Clone and run (training PC)
+
+Preferred command (**Python**, no Hugging Face CLI — that installer fails in Git Bash with `OS: unknown`):
 
 ```bash
-git clone https://github.com/Sushey01/Socratic-Model-Fine-Tune.git && cd Socratic-Model-Fine-Tune && bash start.sh
+python start.py
 ```
 
-Put Hub and W&B settings in **local `.env`**. Each prompt is on its **own line**. Type or paste the key, then **Enter**. Do not put two keys on one line.
-
-If Git Bash says `command not found` and prints a long `wandb_v1_...` string, `.env` is broken: delete `.env`, **revoke that W&B key** (it was treated as a shell command), create a new key, then `bash start.sh` again.
-
-**One command on the training PC (NVIDIA GPU):**
+or, if `uv` is installed:
 
 ```bash
-bash start.sh
+uv run python start.py
 ```
 
-That run: SFT → ScienceQA after each epoch → W&B charts → push LoRA to Hugging Face.
+`bash start.sh` only forwards to `start.py`.
+
+### `.env` is used automatically
+
+If `.env` already has `WANDB_API_KEY` and `HF_TOKEN` (no `#` in front of those lines), **`start.py` will not ask you to paste keys**. You should see `Using WANDB_API_KEY from .env` and `Using HF_TOKEN from .env`. It only prompts when a key is missing or commented out.
+
+Each line must be `NAME=value` (quotes optional):
 
 ```bash
-bash start.sh --fresh                 # ignore old checkpoints
-bash start.sh --download-checkpoints  # pull Hub adapters + latest checkpoint, then continue
-bash start.sh --gguf                  # after fine-tune: GGUF steps (not part of train)
+WANDB_API_KEY=...
+HF_TOKEN=hf_...
+HF_HUB_REPO=Susu11/socratic-phi3
+HF_DATASET_REPO=Susu11/socraticfinetune
+WANDB_PROJECT=socratic-phi3
+```
+
+Do not put a raw token on its own line. Do not `source .env` in Git Bash.
+
+**One run:** SFT → ScienceQA after each epoch → W&B → push LoRA (Python Hub API, not `hf`).
+
+```bash
+python start.py --fresh
+python start.py --download-checkpoints
+python start.py --gguf
 ```
 
 ## Hugging Face
@@ -34,9 +50,9 @@ Keep a local `.env` (gitignored). Do **not** commit it. On the college PC, creat
 
 | Variable | Example | What |
 | --- | --- | --- |
-| `HF_DATASET_REPO` | `Susu11/socraticfinetune` | JSONL via `hf upload … --repo-type=dataset` |
+| `HF_DATASET_REPO` | `Susu11/socraticfinetune` | JSONL via Python Hub API |
 | `HF_HUB_REPO` | `Susu11/socratic-phi3` | Adapters + **latest** checkpoint after train |
-| `HF_TOKEN` | `hf_...` **without a `#` in front** | Write token; `start.sh` reads this automatically |
+| `HF_TOKEN` | `hf_...` **without a `#` in front** | Write token; `start.py` reads `.env` |
 | `WANDB_API_KEY` | from wandb.ai | Logs ScienceQA after every epoch |
 | `WANDB_PROJECT` | `socratic-phi3` | W&B project name (optional) |
 
