@@ -10,7 +10,7 @@ Fine-tune Phi-3 as a Grade 10 Socratic science tutor using [socratic_train.jsonl
 git clone https://github.com/Sushey01/Socratic-Model-Fine-Tune.git && cd Socratic-Model-Fine-Tune && bash start.sh
 ```
 
-`start.sh` installs [uv](https://docs.astral.sh/uv/) and the [Hugging Face CLI](https://hf.co/cli/install.sh) (`curl -LsSf https://hf.co/cli/install.sh | bash`), then `hf auth login` from `HF_TOKEN` in `.env`. It uploads **only** `socratic_train.jsonl` (not `.`, so `.env` is never published). Create a write token with the usual boxes (Python, Git, HTTPS, SSH). Never paste the token into chat or GitHub.
+Put Hub settings in **local `.env` only**. `bash start.sh` sources that file and passes `HF_TOKEN` into `hf upload` / `train.py`. You do **not** run `hf auth login` for this project (that uses a different stored token and caused the “not found / invalid token” errors). Never commit `.env` or paste the token into chat.
 
 ```bash
 bash start.sh --fresh                 # ignore old checkpoints
@@ -26,17 +26,11 @@ Keep a local `.env` (gitignored). Do **not** commit it. On the college PC, creat
 | --- | --- | --- |
 | `HF_DATASET_REPO` | `Susu11/socraticfinetune` | JSONL via `hf upload … --repo-type=dataset` |
 | `HF_HUB_REPO` | `Susu11/socratic-phi3` | Adapters + **latest** checkpoint after train |
-| `HF_TOKEN` | (your write token) | `hf auth login` |
+| `HF_TOKEN` | `hf_...` **without a `#` in front** | Write token; `start.sh` reads this automatically |
+
+`HF_TOKEN=...` must be an active line. A leading `#` means “comment” and the script cannot see it.
 
 **Do not put the Phi-3 model or LoRA files in this GitHub folder.** `train.py` downloads [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) automatically. Checkpoints stay in `socratic_finetuned_model/` (gitignored) and on Hugging Face.
-
-Manual equivalent (dataset only; do not upload `.`):
-
-```bash
-curl -LsSf https://hf.co/cli/install.sh | bash
-hf auth login
-hf upload Susu11/socraticfinetune socratic_train.jsonl --repo-type=dataset
-```
 
 After train, the **model** repo contains:
 
