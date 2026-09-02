@@ -1,10 +1,10 @@
 .venv/
+.venv-train/
 .uv/
 __pycache__/
 *.py[cod]
 *.egg-info/
 dist/
-.python-version
 .env
 .hf_token
 .huggingface/

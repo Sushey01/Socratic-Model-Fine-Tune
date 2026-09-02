@@ -19,6 +19,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 ENV_PATH = ROOT / ".env"
+# Separate from the .venv that launched `uv run python start.py`. Windows will
+# not let uv delete `.venv\Scripts` while this process is still using it.
+TRAIN_VENV = ROOT / ".venv-train"
 
 
 def load_dotenv_file() -> None:
@@ -123,6 +126,9 @@ def ensure_secrets() -> None:
 def _python() -> list[str]:
     uv = shutil.which("uv")
     if uv:
+        if sys.version_info[:2] != (3, 12):
+            _use_train_venv()
+            return [uv, "run", "--python", "3.12", "python"]
         return [uv, "run", "python"]
     return [sys.executable]
 
@@ -135,14 +141,27 @@ def run(args: list[str]) -> None:
         raise SystemExit(exc.returncode) from None
 
 
+def _use_train_venv() -> None:
+    os.environ["UV_PROJECT_ENVIRONMENT"] = str(TRAIN_VENV)
+
+
 def sync_deps() -> None:
     uv = shutil.which("uv")
-    if uv:
-        print("Installing Python 3.12 env and dependencies with uv...")
-        run([uv, "python", "pin", "3.12"])
+    if not uv:
+        print("uv not found; using current Python:", sys.executable)
+        return
+    # Never `uv python pin` + `uv sync` on the in-use project .venv: that is
+    # Access is denied (os error 5) on Windows while start.py is running.
+    if sys.version_info[:2] == (3, 12):
+        print("Python 3.12 already; syncing current environment...")
         run([uv, "sync"])
         return
-    print("uv not found; using current Python:", sys.executable)
+    print(
+        f"Launcher is Python {sys.version_info.major}.{sys.version_info.minor}; "
+        f"installing a separate 3.12 env at {TRAIN_VENV.name} ..."
+    )
+    _use_train_venv()
+    run([uv, "sync", "--python", "3.12"])
 
 
 def cuda_ok() -> bool:
@@ -174,10 +193,10 @@ def maybe_cuda_wheel() -> None:
         return
     print(
         "Still no CUDA. On Windows, NVIDIA + Python 3.12 CUDA torch is required.\n"
-        "In this folder run:\n"
-        "  nvidia-smi\n"
+        "Close other Python windows, then in this folder:\n"
+        "  Remove-Item -Recurse -Force .venv, .venv-train -ErrorAction SilentlyContinue\n"
         "  uv python pin 3.12\n"
-        "  uv sync\n"
+        "  uv sync --python 3.12\n"
         "  uv pip install torch --index-url https://download.pytorch.org/whl/cu124\n"
         "  uv run python -c \"import torch; print(torch.__version__, torch.cuda.is_available())\"\n"
         "If nvidia-smi works but torch.cuda is False, use WSL2 Ubuntu or a Linux GPU machine.",
