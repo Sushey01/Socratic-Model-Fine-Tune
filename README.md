@@ -1,64 +1,47 @@
 # Socratic model fine-tune
 
-Fine-tune `microsoft/Phi-3-mini-4k-instruct` as a Grade 10 Socratic science tutor using [socratic_train.jsonl](socratic_train.jsonl).
+Fine-tune Phi-3 as a Grade 10 Socratic science tutor using [socratic_train.jsonl](socratic_train.jsonl).
 
-- **GitHub** = code + dataset. `git pull` on either machine to get script/data changes.
-- **Hugging Face Hub** = LoRA adapters **and checkpoints**. Download those at home to continue training or to run the model.
+## Clone and run (other PC)
 
-Do not commit tokens. Log in on each PC yourself.
-
-## One command (college GPU)
-
-Install [uv](https://docs.astral.sh/uv/) once, clone this repo, then:
+One paste in the terminal:
 
 ```bash
-huggingface-cli login
-export HF_HUB_REPO=YOUR_HF_USER/socratic-phi3-lora
-uv run python train.py
+git clone https://github.com/Sushey01/Socratic-Model-Fine-Tune.git && cd Socratic-Model-Fine-Tune && bash start.sh
 ```
 
-The first run creates `.venv` and installs packages, then trains. Later runs of the same command **resume from the latest `checkpoint-*`** under `./socratic_finetuned_model`.
+`start.sh` installs [uv](https://docs.astral.sh/uv/) if needed, installs packages, trains, **resumes checkpoints**, and uploads adapters if you give a Hugging Face repo/token (first run asks once and saves `.env`; after that only `bash start.sh`).
 
-Needs an NVIDIA GPU (`nvidia-smi` should work). If `uv` installs a CPU-only PyTorch, install a CUDA wheel in the project env, for example:
+Needs an NVIDIA GPU (`nvidia-smi`). Do not paste tokens into GitHub or this README.
+
+Optional:
 
 ```bash
-uv pip install torch --index-url https://download.pytorch.org/whl/cu124
+bash start.sh --fresh                 # ignore old checkpoints
+bash start.sh --download-checkpoints  # pull HF_HUB_REPO then continue training
 ```
 
-## Checkpoints (continue later)
+## Hugging Face models (follow these on GitHub)
 
-Training writes:
+| What | Hub page |
+| --- | --- |
+| Starting model (notebook / local MLX 4-bit) | [Oscilla/Phi-3.5-mini-instruct-mlx-4Bit](https://huggingface.co/Oscilla/Phi-3.5-mini-instruct-mlx-4Bit) |
+| Model `train.py` loads on a college **NVIDIA GPU** | [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) |
+| Your LoRA adapters + checkpoints after training | `HF_HUB_REPO` in `.env` (see [.env.example](.env.example)) |
 
-- `socratic_finetuned_model/checkpoint-100`, `checkpoint-200`, … (last 3 kept by default)
-- Final adapters in `socratic_finetuned_model/`
+The Oscilla card is a 4-bit **MLX** build (typical on Apple Silicon). College CUDA training uses the Microsoft Phi-3 checkpoint with bitsandbytes 4-bit LoRA, then you push adapters to **your** Hub repo so home can download them.
 
-Resume on the **same machine**:
+- **GitHub** = code + dataset + `start.sh`
+- **Hugging Face Hub** = base models above, plus your LoRA adapters **and checkpoints**
 
-```bash
-uv run python train.py
-```
+## Checkpoints
 
-Start over:
+Training writes `socratic_finetuned_model/checkpoint-*` (last 3 kept) and final adapters in that folder. Running `bash start.sh` again continues from the latest checkpoint.
 
-```bash
-uv run python train.py --no-resume
-```
-
-Continue on **another machine**: upload happens automatically when `HF_HUB_REPO` is set. At home:
+At home, after a college run that uploaded to the Hub:
 
 ```bash
-git pull
-hf download YOUR_HF_USER/socratic-phi3-lora --local-dir ./socratic_finetuned_model
-uv run python train.py
-```
-
-That download includes checkpoints, so training continues from the last saved step.
-
-## Home: code vs weights
-
-```bash
-git pull
-hf download YOUR_HF_USER/socratic-phi3-lora --local-dir ./socratic_finetuned_model
+git pull && bash start.sh --download-checkpoints
 ```
 
 `socratic_train_data.jsonl` is an older instruction-format file and is not used by `train.py`.
