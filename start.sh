@@ -38,12 +38,38 @@ EOF
   exit 0
 fi
 
-if [[ -f "$ROOT/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$ROOT/.env"
-  set +a
-fi
+load_env_file() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  local line key val
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" == *=* ]] || continue
+    key="${line%%=*}"
+    val="${line#*=}"
+    key="${key// /}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    val="${val#\'}"
+    val="${val%\'}"
+    val="${val#\"}"
+    val="${val%\"}"
+    val="${val//$'\n'/}"
+    val="${val//$'\r'/}"
+    printf -v "$key" '%s' "$val"
+    export "$key"
+  done <"$file"
+}
+
+quote_env() {
+  local v="$1"
+  v="${v//$'\r'/}"
+  v="${v//$'\n'/}"
+  v="${v//\'/\'\\\'\'}"
+  printf "'%s'" "$v"
+}
+
+load_env_file "$ROOT/.env"
 
 export HF_DATASET_REPO="${HF_DATASET_REPO:-Susu11/socraticfinetune}"
 if [[ -z "${HF_HUB_REPO:-}" || "${HF_HUB_REPO}" == "YOUR_HF_USER/socratic-phi3" ]]; then
@@ -58,19 +84,26 @@ hf_token() {
 ask_hidden() {
   local prompt="$1"
   local value=""
+  echo "$prompt" >&2
   if [[ -t 0 ]]; then
-    read -r -s -p "$prompt" value || true
-    echo
+    IFS= read -r -s value || true
+    echo >&2
   fi
+  value="${value//$'\r'/}"
+  value="${value//$'\n'/}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
 }
 
 ask_line() {
   local prompt="$1"
   local value=""
+  echo "$prompt" >&2
   if [[ -t 0 ]]; then
-    read -r -p "$prompt" value || true
+    IFS= read -r value || true
   fi
+  value="${value//$'\r'/}"
   printf '%s' "$value"
 }
 
@@ -79,15 +112,15 @@ persist_env() {
   local tmp
   tmp="$(mktemp)"
   {
-    echo "# local secrets — never commit"
-    echo "HF_DATASET_REPO=${HF_DATASET_REPO}"
-    echo "HF_HUB_REPO=${HF_HUB_REPO}"
-    echo "WANDB_PROJECT=${WANDB_PROJECT}"
+    echo "# local secrets — never commit this file"
+    echo "HF_DATASET_REPO=$(quote_env "$HF_DATASET_REPO")"
+    echo "HF_HUB_REPO=$(quote_env "$HF_HUB_REPO")"
+    echo "WANDB_PROJECT=$(quote_env "$WANDB_PROJECT")"
     if [[ -n "${WANDB_API_KEY:-}" ]]; then
-      echo "WANDB_API_KEY=${WANDB_API_KEY}"
+      echo "WANDB_API_KEY=$(quote_env "$WANDB_API_KEY")"
     fi
     if [[ -n "$(hf_token)" ]]; then
-      echo "HF_TOKEN=$(hf_token)"
+      echo "HF_TOKEN=$(quote_env "$(hf_token)")"
     fi
   } >"$tmp"
   mv "$tmp" "$ROOT/.env"
@@ -97,7 +130,7 @@ if [[ -z "${WANDB_API_KEY:-}" ]]; then
   if grep -qE '^[[:space:]]*#[[:space:]]*WANDB_API_KEY=' "$ROOT/.env" 2>/dev/null; then
     echo "WANDB_API_KEY in .env is commented out. Enter the live key (or uncomment the line)."
   fi
-  WANDB_API_KEY="$(ask_hidden "Weights & Biases API key (wandb.ai/authorize, hidden): ")"
+  WANDB_API_KEY="$(ask_hidden "Paste Weights & Biases API key, then press Enter (wandb.ai/authorize): ")"
   export WANDB_API_KEY
 fi
 if [[ -z "${WANDB_API_KEY:-}" ]]; then
@@ -109,7 +142,7 @@ if [[ -z "$(hf_token)" ]]; then
   if grep -qE '^[[:space:]]*#[[:space:]]*HF_TOKEN=' "$ROOT/.env" 2>/dev/null; then
     echo "HF_TOKEN in .env is commented out. Enter the live write token (or uncomment the line)."
   fi
-  HF_TOKEN="$(ask_hidden "Hugging Face write token (huggingface.co/settings/tokens, hidden): ")"
+  HF_TOKEN="$(ask_hidden "Paste Hugging Face write token, then press Enter (huggingface.co/settings/tokens): ")"
   export HF_TOKEN
   export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
 fi
@@ -141,15 +174,17 @@ ensure_uv() {
 }
 
 ensure_hf_cli() {
-  export PATH="${HOME}/.local/bin:${PATH}"
+  export PATH="${HOME}/.local/bin:${HOME}/.hf-cli:${PATH}"
   if command -v hf >/dev/null 2>&1; then
     return
   fi
   echo "Installing Hugging Face CLI..."
   curl -LsSf https://hf.co/cli/install.sh | bash
-  export PATH="${HOME}/.local/bin:${PATH}"
+  export PATH="${HOME}/.local/bin:${HOME}/.hf-cli:${PATH}"
+  hash -r 2>/dev/null || true
   if ! command -v hf >/dev/null 2>&1; then
-    echo "hf CLI not on PATH. Open a new terminal or add ~/.local/bin to PATH." >&2
+    echo "hf CLI not on PATH. Close Git Bash, reopen it, then run: bash start.sh" >&2
+    echo "Also add to PATH: ${HOME}/.local/bin" >&2
     exit 1
   fi
 }

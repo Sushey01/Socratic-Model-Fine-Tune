@@ -10,7 +10,9 @@ Fine-tune Phi-3 as a Grade 10 Socratic science tutor using [socratic_train.jsonl
 git clone https://github.com/Sushey01/Socratic-Model-Fine-Tune.git && cd Socratic-Model-Fine-Tune && bash start.sh
 ```
 
-Put Hub and W&B settings in **local `.env`**. If a key is missing, **`bash start.sh` asks for it** (hidden input) and writes `.env`. You do not need `hf auth login` or `wandb login` separately.
+Put Hub and W&B settings in **local `.env`**. Each prompt is on its **own line**. Type or paste the key, then **Enter**. Do not put two keys on one line.
+
+If Git Bash says `command not found` and prints a long `wandb_v1_...` string, `.env` is broken: delete `.env`, **revoke that W&B key** (it was treated as a shell command), create a new key, then `bash start.sh` again.
 
 **One command on the training PC (NVIDIA GPU):**
 
