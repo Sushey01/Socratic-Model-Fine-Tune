@@ -8,6 +8,7 @@ Hugging Face gets the final LoRA adapters after training finishes. Re-run to res
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import getpass
 import json
 import os
@@ -190,14 +191,18 @@ def wandb_enabled() -> bool:
     return bool(os.environ.get("WANDB_API_KEY", "").strip())
 
 
-def init_wandb() -> None:
+def init_wandb() -> bool:
+    """Start W&B using WANDB_API_KEY. Do not call wandb.login() — it hangs on Windows."""
     if not wandb_enabled():
-        print("WANDB_API_KEY still missing; ScienceQA metrics print in the terminal only.")
-        return
+        print("WANDB_API_KEY still missing; metrics print in the terminal only.", flush=True)
+        return False
     import wandb
 
-    wandb.login(key=os.environ["WANDB_API_KEY"], relogin=True)
-    wandb.init(
+    os.environ.setdefault("WANDB_START_METHOD", "thread")
+    os.environ.setdefault("WANDB_DISABLE_GIT", "true")
+    os.environ.setdefault("WANDB_DISABLE_CODE", "true")
+    print("Connecting to Weights & Biases (90s timeout)...", flush=True)
+    init_kw = dict(
         project=os.environ.get("WANDB_PROJECT", "socratic-phi3"),
         name=os.environ.get("WANDB_RUN_NAME") or None,
         config={
@@ -206,7 +211,23 @@ def init_wandb() -> None:
             "benchmark": "ScienceQA natural science grades 3-10",
         },
     )
-    print(f"W&B run: {wandb.run.url if wandb.run else '(offline)'}")
+    try:
+        init_kw["settings"] = wandb.Settings(init_timeout=60)
+    except TypeError:
+        pass
+
+    def _online():
+        wandb.init(**init_kw)
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(_online).result(timeout=90)
+    except Exception as exc:
+        print(f"W&B online init failed or timed out ({exc}); offline mode.", flush=True)
+        os.environ["WANDB_MODE"] = "offline"
+        wandb.init(project=os.environ.get("WANDB_PROJECT", "socratic-phi3"), mode="offline")
+    print(f"W&B run: {wandb.run.url if wandb.run else '(offline)'}", flush=True)
+    return wandb.run is not None
 
 
 def log_scienceqa_to_wandb(metrics: dict, epoch: float, step: int) -> None:
@@ -275,6 +296,21 @@ class ScienceQAEpochCallback(TrainerCallback):
         )
         log_scienceqa_to_wandb(metrics, epoch, state.global_step)
         model.train()
+        return control
+
+
+class HeartbeatCallback(TrainerCallback):
+    """Print progress even when W&B never opened a cloud run."""
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if logs:
+            bits = " ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in logs.items())
+            print(f"[train] step={state.global_step} epoch={float(state.epoch or 0):.2f} {bits}", flush=True)
+        return control
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if state.global_step and state.global_step % 25 == 0:
+            print(f"[train] heartbeat step={state.global_step} epoch={float(state.epoch or 0):.2f}", flush=True)
         return control
 
 
@@ -390,6 +426,7 @@ def main() -> None:
         max_steps=-1,
         lr_scheduler_type="constant",
         report_to="wandb" if wandb_enabled() else "none",
+        logging_first_step=True,
         max_length=args.max_length,
         packing=False,
         save_strategy="steps",
@@ -412,22 +449,26 @@ def main() -> None:
         }
 
     dataset = dataset.map(to_text, remove_columns=[c for c in dataset.column_names if c != "text"])
+    print("Dataset mapped. Connecting W&B, then building trainer.", flush=True)
 
-    init_wandb()
+    if not init_wandb():
+        training_arguments.report_to = ["none"]
 
     trainer_kwargs = {
         "model": model,
         "train_dataset": dataset,
         "peft_config": lora_config,
         "args": training_arguments,
-        "callbacks": [ScienceQAEpochCallback(tokenizer, args.data)],
+        "callbacks": [HeartbeatCallback(), ScienceQAEpochCallback(tokenizer, args.data)],
     }
+    print("Building SFTTrainer...", flush=True)
     try:
         trainer = SFTTrainer(processing_class=tokenizer, **trainer_kwargs)
     except TypeError:
         trainer = SFTTrainer(tokenizer=tokenizer, **trainer_kwargs)
 
     resume_from = resolve_checkpoint(args.output_dir, resume=not args.no_resume)
+    print("Calling trainer.train() — watch [train] heartbeat lines and GPU use.", flush=True)
     trainer.train(resume_from_checkpoint=resume_from)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)

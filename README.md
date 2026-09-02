@@ -44,7 +44,7 @@ powershell -ExecutionPolicy Bypass -File .\start.ps1
 
 `uv sync` installs CUDA **cu124** torch on Windows/Linux (PyPI torch is CPU-only on Windows). If Application Control blocks `.venv\Scripts\python.exe` (error **4551**), `start.ps1` retries with uv’s managed Python. A WDAC allow-list cannot be automated; IT must allow the folder, or use **WSL2**.
 
-**One run:** SFT → ScienceQA after each epoch → W&B → push LoRA (Python Hub API, not `hf`).
+**Kaggle (GPU T4, internet on):** upload [kaggle_socratic_finetune.ipynb](kaggle_socratic_finetune.ipynb). Add secrets `WANDB_API_KEY` and `HF_TOKEN`. Do not install `wandb[sandbox]` or run `wandb login`. Charts appear only after the notebook prints `W&B run: https://wandb.ai/...`.
 
 ```bash
 python start.py --fresh

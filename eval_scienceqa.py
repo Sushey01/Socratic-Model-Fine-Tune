@@ -108,6 +108,7 @@ def load_eval_slice(n: int = EVAL_N, seed: int = EVAL_SEED) -> list[dict]:
         print(f"ScienceQA eval slice: {len(rows)} items (cached {cache.name})")
         return rows
 
+    print(f"Downloading ScienceQA ({SCIENCEQA_ID}) test split for eval cache...", flush=True)
     raw = load_dataset(SCIENCEQA_ID, split="test")
     drop = [c for c in raw.column_names if c in {"image", "lecture", "hint", "solution"}]
     if drop:
