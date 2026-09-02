@@ -44,7 +44,9 @@ powershell -ExecutionPolicy Bypass -File .\start.ps1
 
 `uv sync` installs CUDA **cu124** torch on Windows/Linux (PyPI torch is CPU-only on Windows). If Application Control blocks `.venv\Scripts\python.exe` (error **4551**), `start.ps1` retries with uv’s managed Python. A WDAC allow-list cannot be automated; IT must allow the folder, or use **WSL2**.
 
-**Kaggle (GPU T4, internet on):** upload [kaggle_socratic_finetune.ipynb](kaggle_socratic_finetune.ipynb). Add secrets `WANDB_API_KEY` and `HF_TOKEN`. Do not install `wandb[sandbox]` or run `wandb login`. Charts appear only after the notebook prints `W&B run: https://wandb.ai/...`.
+**Colab:** use the existing [socratic_model_fine_tune_3.8b.ipynb](socratic_model_fine_tune_3.8b.ipynb). Mount Drive first; checkpoints go to `MyDrive/socratic_finetuned_model` so they survive a runtime restart. Do not pass `train_sampling_strategy` into `SFTConfig`.
+
+**Kaggle (GPU T4, internet on):** [kaggle_socratic_finetune.ipynb](kaggle_socratic_finetune.ipynb). Add secrets `WANDB_API_KEY` and `HF_TOKEN`. Do not install `wandb[sandbox]` or run `wandb login`.
 
 ```bash
 python start.py --fresh
