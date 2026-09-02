@@ -331,13 +331,6 @@ def main() -> None:
 
     dataset = load_jsonl(args.data)
 
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
-    )
-
     config = AutoConfig.from_pretrained(args.model, trust_remote_code=True)
     if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
         if "type" not in config.rope_scaling:
@@ -347,13 +340,22 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model,
-        config=config,
-        quantization_config=quantization_config,
-        device_map={"": 0},
-        trust_remote_code=True,
-    )
+    load_kw = dict(config=config, device_map={"": 0}, trust_remote_code=True)
+    use_bnb = True
+    try:
+        load_kw["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+        )
+        model = AutoModelForCausalLM.from_pretrained(args.model, **load_kw)
+    except Exception as exc:
+        print(f"4-bit bitsandbytes load failed ({exc}); retrying fp16 without 4-bit.")
+        use_bnb = False
+        load_kw.pop("quantization_config", None)
+        torch_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch_dtype, **load_kw)
 
     lora_config = LoraConfig(
         r=8,
@@ -371,7 +373,7 @@ def main() -> None:
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
-        optim="paged_adamw_8bit",
+        optim="paged_adamw_8bit" if use_bnb else "adamw_torch",
         logging_steps=10,
         learning_rate=2e-4,
         fp16=not use_bf16,

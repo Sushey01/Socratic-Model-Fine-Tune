@@ -10,15 +10,13 @@ Preferred command (**Python**, no Hugging Face CLI — that installer fails in G
 
 ```bash
 python start.py
-```
-
-or, if `uv` is installed:
-
-```bash
+# or
 uv run python start.py
+# Windows:
+powershell -ExecutionPolicy Bypass -File .\start.ps1
+# Linux/WSL:
+bash start.sh
 ```
-
-`bash start.sh` only forwards to `start.py`.
 
 ### `.env` is used automatically
 
@@ -36,21 +34,15 @@ WANDB_PROJECT=socratic-phi3
 
 Do not put a raw token on its own line. Do not `source .env` in Git Bash.
 
-**Windows:** `uv` often starts on 3.13/3.14 (CPU-only torch). This repo pins **3.12**. Do not recreate `.venv` from inside a running `uv run` (that hits `Access is denied` on `Scripts`). After `git pull`, if `.venv` is stuck:
+**Windows (MSI / college PC):** one command installs `uv` and Python 3.12 if they are missing, then trains:
 
 ```powershell
 cd $HOME\Socratic-Model-Fine-Tune
-Get-Process python, uv -ErrorAction SilentlyContinue | Stop-Process -Force
-Remove-Item -Recurse -Force .venv, .venv-train -ErrorAction SilentlyContinue
-uv python pin 3.12
-uv sync --python 3.12
-nvidia-smi
-uv run python start.py
+git pull
+powershell -ExecutionPolicy Bypass -File .\start.ps1
 ```
 
-`start.py` then installs train deps into `.venv-train` if the launcher is not already 3.12.
-
-Confirm `torch.cuda.is_available()` becomes True. If `nvidia-smi` works but CUDA is still False, train in **WSL2** or on a Linux GPU box (`bitsandbytes` is unreliable on native Windows).
+`uv sync` installs CUDA **cu124** torch on Windows/Linux (PyPI torch is CPU-only on Windows). If Application Control blocks `.venv\Scripts\python.exe` (error **4551**), `start.ps1` retries with uv’s managed Python. A WDAC allow-list cannot be automated; IT must allow the folder, or use **WSL2**.
 
 **One run:** SFT → ScienceQA after each epoch → W&B → push LoRA (Python Hub API, not `hf`).
 
