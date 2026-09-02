@@ -62,7 +62,52 @@ def resolve_checkpoint(output_dir: Path, resume: bool) -> str | None:
     return last
 
 
-def push_output(output_dir: Path, repo_id: str) -> None:
+def write_model_card(output_dir: Path, repo_id: str, base_model: str) -> None:
+    last = get_last_checkpoint(str(output_dir))
+    last_name = Path(last).name if last else "none"
+    card = f"""---
+library_name: peft
+base_model: {base_model}
+tags:
+  - lora
+  - sft
+  - socratic
+  - education
+---
+
+# {repo_id}
+
+Grade 10 Socratic science tutor LoRA. **GitHub** holds code and data; **this Hub repo** holds weights.
+
+## What is in this repo
+
+1. **Deploy (repo root):** PEFT adapters + tokenizer. Load with `PeftModel.from_pretrained("{repo_id}")` on top of `{base_model}`.
+2. **Resume:** only the **latest** Trainer folder (`{last_name}`). Continue with `bash start.sh --download-checkpoints` then `bash start.sh`.
+3. **GGUF (later):** after fine-tune, `bash start.sh --gguf` (merge + llama.cpp quant). Not uploaded during training.
+
+Older `checkpoint-*` folders are not kept on the Hub. Local training still snapshots every 100 steps and keeps the last 3 on disk.
+
+## Linked models
+
+- CUDA train base: [{base_model}](https://huggingface.co/{base_model})
+- Notebook / MLX 4-bit reference: [Oscilla/Phi-3.5-mini-instruct-mlx-4Bit](https://huggingface.co/Oscilla/Phi-3.5-mini-instruct-mlx-4Bit)
+"""
+    (output_dir / "README.md").write_text(card, encoding="utf-8")
+
+
+def _hub_checkpoint_names(api, repo_id: str) -> list[str]:
+    names: set[str] = set()
+    try:
+        for item in api.list_repo_tree(repo_id, repo_type="model", recursive=False):
+            path = getattr(item, "path", None) or str(item)
+            if path.startswith("checkpoint-"):
+                names.add(path.split("/")[0])
+    except Exception as exc:
+        print(f"Could not list Hub checkpoints ({exc}); skip prune.")
+    return sorted(names)
+
+
+def push_output(output_dir: Path, repo_id: str, base_model: str) -> None:
     from huggingface_hub import HfApi, login
 
     token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
@@ -70,13 +115,39 @@ def push_output(output_dir: Path, repo_id: str) -> None:
         login(token=token, add_to_git_credential=False)
     api = HfApi()
     api.create_repo(repo_id, exist_ok=True, repo_type="model", private=True)
-    print(f"Uploading {output_dir} (adapters + checkpoints) to {repo_id}")
+
+    write_model_card(output_dir, repo_id, base_model)
+    last = get_last_checkpoint(str(output_dir))
+    last_name = Path(last).name if last else None
+
+    print(f"Uploading adapters + tokenizer (repo root) to {repo_id}")
     api.upload_folder(
         folder_path=str(output_dir),
         repo_id=repo_id,
         repo_type="model",
-        ignore_patterns=["*.tmp", "tmp_trainer/**"],
+        ignore_patterns=[
+            "checkpoint-*",
+            "checkpoint-*/**",
+            "runs/**",
+            "tmp_trainer/**",
+            "*.tmp",
+        ],
     )
+
+    if last:
+        print(f"Uploading latest checkpoint only: {last_name}")
+        api.upload_folder(
+            folder_path=last,
+            path_in_repo=last_name,
+            repo_id=repo_id,
+            repo_type="model",
+            ignore_patterns=["rng_state*", "*.tmp"],
+        )
+        for name in _hub_checkpoint_names(api, repo_id):
+            if name != last_name:
+                print(f"Removing old Hub checkpoint {name}")
+                api.delete_folder(repo_id=repo_id, path_in_repo=name, repo_type="model")
+
     print(f"Pushed to https://huggingface.co/{repo_id}")
 
 
@@ -99,7 +170,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--push-to-hub",
         default=os.environ.get("HF_HUB_REPO", ""),
-        help="HF repo id (or set HF_HUB_REPO). Uploads adapters and checkpoints.",
+        help="HF repo id (or set HF_HUB_REPO). Uploads adapters plus the latest checkpoint only.",
     )
     return parser.parse_args()
 
@@ -206,13 +277,15 @@ def main() -> None:
     trainer.model.save_pretrained(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
     print(f"Saved adapters and tokenizer to {args.output_dir}")
-    print("Latest checkpoint is also under that folder as checkpoint-*")
+    last = get_last_checkpoint(str(args.output_dir))
+    if last:
+        print(f"Latest resume checkpoint: {last}")
 
     repo_id = (args.push_to_hub or "").strip()
     if repo_id:
-        push_output(args.output_dir, repo_id)
+        push_output(args.output_dir, repo_id, args.model)
     else:
-        print("Skipping Hub upload (set HF_HUB_REPO or --push-to-hub to upload checkpoints).")
+        print("Skipping Hub upload (set HF_HUB_REPO or --push-to-hub).")
 
 
 if __name__ == "__main__":
