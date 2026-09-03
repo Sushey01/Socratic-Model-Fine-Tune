@@ -32,6 +32,34 @@ DEFAULT_OUTPUT = ROOT / "socratic_finetuned_model"
 DEFAULT_MODEL = "microsoft/Phi-3-mini-4k-instruct"
 
 
+def load_base_config(model_id: str):
+    """Hub Phi-3 config often has rope_type but old modeling_phi3.py wants rope_scaling['type']."""
+    config = AutoConfig.from_pretrained(model_id, trust_remote_code=True)
+    rs = getattr(config, "rope_scaling", None)
+    if isinstance(rs, dict) and "type" not in rs:
+        copied = dict(rs)
+        if copied.get("rope_type"):
+            copied["type"] = copied["rope_type"]
+            config.rope_scaling = copied
+        else:
+            config.rope_scaling = None
+    return config
+
+
+def from_pretrained_phi3(model_id: str, **kwargs):
+    """Load Phi-3; fall back to transformers built-in class if remote rope_scaling crashes."""
+    kwargs.setdefault("attn_implementation", "eager")
+    config = kwargs.pop("config", None) or load_base_config(model_id)
+    try:
+        return AutoModelForCausalLM.from_pretrained(
+            model_id, config=config, trust_remote_code=True, **kwargs
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        print(f"Remote Phi-3 code failed ({exc!r}); loading built-in transformers Phi-3.", flush=True)
+        kwargs.pop("trust_remote_code", None)
+        return AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=False, **kwargs)
+
+
 def load_jsonl(path: Path) -> Dataset:
     rows = []
     errors = []
@@ -371,35 +399,27 @@ def main() -> None:
 
     dataset = load_jsonl(args.data)
 
-    config = AutoConfig.from_pretrained(args.model, trust_remote_code=True)
-    if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-        if "type" not in config.rope_scaling:
-            config.rope_scaling = None
-
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    load_kw = dict(config=config, device_map={"": 0}, trust_remote_code=True)
     use_bnb = True
+    bnb = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_use_double_quant=True,
+    )
     try:
-        load_kw["quantization_config"] = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
-            bnb_4bit_use_double_quant=True,
-        )
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model, attn_implementation="eager", **load_kw
-        )
+        model = from_pretrained_phi3(args.model, quantization_config=bnb, device_map={"": 0})
     except Exception as exc:
         print(f"4-bit bitsandbytes load failed ({exc}); retrying fp16 without 4-bit.")
         use_bnb = False
-        load_kw.pop("quantization_config", None)
-        torch_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model, torch_dtype=torch_dtype, attn_implementation="eager", **load_kw
-        )
+        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        try:
+            model = from_pretrained_phi3(args.model, dtype=dtype, device_map={"": 0})
+        except TypeError:
+            model = from_pretrained_phi3(args.model, torch_dtype=dtype, device_map={"": 0})
 
     lora_config = LoraConfig(
         r=8,

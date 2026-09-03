@@ -4,21 +4,31 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 import torch
 from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoTokenizer, BitsAndBytesConfig
 
-from eval_scienceqa import EVAL_N, load_eval_slice, ngram_overlap, run_scienceqa_eval
-from train import DEFAULT_DATA, DEFAULT_MODEL, DEFAULT_OUTPUT, init_wandb, log_scienceqa_to_wandb, wandb_enabled
+from eval_scienceqa import load_eval_slice, ngram_overlap, run_scienceqa_eval
+from train import (
+    DEFAULT_DATA,
+    DEFAULT_MODEL,
+    DEFAULT_OUTPUT,
+    from_pretrained_phi3,
+    init_wandb,
+    log_scienceqa_to_wandb,
+    wandb_enabled,
+)
 
 ROOT = Path(__file__).resolve().parent
 
 
 def load_adapters(adapter_dir: Path, base: str):
-    tok = AutoTokenizer.from_pretrained(adapter_dir if (adapter_dir / "tokenizer_config.json").is_file() else base, trust_remote_code=True)
+    tok = AutoTokenizer.from_pretrained(
+        adapter_dir if (adapter_dir / "tokenizer_config.json").is_file() else base,
+        trust_remote_code=True,
+    )
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
     bnb = BitsAndBytesConfig(
@@ -28,19 +38,14 @@ def load_adapters(adapter_dir: Path, base: str):
         bnb_4bit_use_double_quant=True,
     )
     try:
-        model = AutoModelForCausalLM.from_pretrained(
-            base,
-            quantization_config=bnb,
-            device_map={"": 0},
-            trust_remote_code=True,
-            attn_implementation="eager",
-        )
+        model = from_pretrained_phi3(base, quantization_config=bnb, device_map={"": 0})
     except Exception as exc:
         print(f"4-bit load failed ({exc}); using fp16.", flush=True)
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        model = AutoModelForCausalLM.from_pretrained(
-            base, torch_dtype=dtype, device_map={"": 0}, trust_remote_code=True, attn_implementation="eager"
-        )
+        try:
+            model = from_pretrained_phi3(base, dtype=dtype, device_map={"": 0})
+        except TypeError:
+            model = from_pretrained_phi3(base, torch_dtype=dtype, device_map={"": 0})
     model = PeftModel.from_pretrained(model, str(adapter_dir))
     model.eval()
     return model, tok

@@ -12,9 +12,9 @@ from pathlib import Path
 import torch
 from huggingface_hub import HfApi, login
 from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer
 
-from train import DEFAULT_MODEL, DEFAULT_OUTPUT
+from train import DEFAULT_MODEL, DEFAULT_OUTPUT, from_pretrained_phi3
 
 ROOT = Path(__file__).resolve().parent
 MERGED = ROOT / "merged_model"
@@ -29,14 +29,24 @@ def _run(args: list[str]) -> None:
 
 def merge(adapter: Path, base: str) -> Path:
     print(f"Merging {adapter} onto {base} (needs RAM)...", flush=True)
-    tok = AutoTokenizer.from_pretrained(str(adapter) if (adapter / "tokenizer_config.json").is_file() else base, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        base,
-        torch_dtype=torch.float16,
-        device_map="cpu",
+    tok = AutoTokenizer.from_pretrained(
+        str(adapter) if (adapter / "tokenizer_config.json").is_file() else base,
         trust_remote_code=True,
-        low_cpu_mem_usage=True,
     )
+    try:
+        model = from_pretrained_phi3(
+            base,
+            torch_dtype=torch.float16,
+            device_map="cpu",
+            low_cpu_mem_usage=True,
+        )
+    except TypeError:
+        model = from_pretrained_phi3(
+            base,
+            dtype=torch.float16,
+            device_map="cpu",
+            low_cpu_mem_usage=True,
+        )
     model = PeftModel.from_pretrained(model, str(adapter))
     model = model.merge_and_unload()
     MERGED.mkdir(parents=True, exist_ok=True)
