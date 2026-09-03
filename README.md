@@ -33,6 +33,7 @@ HF_HUB_REPO=Susu11/socratic-phi3
 HF_QWEN_REPO=Susu11/Science_Socratic_Qwen3-4B_Instruct
 HF_DATASET_REPO=Susu11/socraticfinetune
 WANDB_PROJECT=socratic-phi3
+WANDB_PROJECT_QWEN=science_socratic_qwen3-4b_instruct
 ```
 
 Do not put a raw token on its own line. Do not `source .env` in Git Bash.
@@ -72,7 +73,8 @@ Keep a local `.env` (gitignored). Do **not** commit it. On the college PC, creat
 | `HF_QWEN_REPO` | `Susu11/Science_Socratic_Qwen3-4B_Instruct` | **Final** Qwen3 Instruct LoRA adapters (`python start.py --qwen`) |
 | `HF_TOKEN` | `hf_...` **without a `#` in front** | Write token; `start.py` reads `.env` |
 | `WANDB_API_KEY` | from wandb.ai | Logs ScienceQA after every epoch |
-| `WANDB_PROJECT` | `socratic-phi3` | W&B project name (optional) |
+| `WANDB_PROJECT` | `socratic-phi3` | W&B project for Phi-3 train/eval |
+| `WANDB_PROJECT_QWEN` | `science_socratic_qwen3-4b_instruct` | W&B project for Qwen (`--qwen` / `--eval --qwen`) |
 
 `HF_TOKEN=...` must be an active line. A leading `#` means “comment” and the script cannot see it.
 

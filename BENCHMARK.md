@@ -69,7 +69,7 @@ python start.py --eval --qwen
 
 Adapters go to `socratic_qwen3_model/` and a **separate** Hub repo `HF_QWEN_REPO` (default `Susu11/Science_Socratic_Qwen3-4B_Instruct`), never `HF_HUB_REPO` / Phi-3. [train_qwen.py](train_qwen.py) is QLoRA (4-bit NF4 + LoRA). The base is [Qwen/Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) (**no thinking mode**). Do not use `Qwen3-4B-Thinking-2507`. After train: `python start.py --eval --qwen` then `python start.py --gguf --qwen` for llama.cpp/Ollama.
 
-Until that run is logged, only the Phi-3 numbers in the table above are recorded.
+Until that run is logged, only the Phi-3 numbers in the table above are recorded. Qwen W&B goes to project **`science_socratic_qwen3-4b_instruct`** (`WANDB_PROJECT_QWEN`), not `socratic-phi3`.
 
 ## Why one dataset: ScienceQA
 
@@ -144,8 +144,10 @@ Put this in **local `.env`**, or let `bash start.sh` ask if a line is missing:
 ```bash
 WANDB_API_KEY=...
 WANDB_PROJECT=socratic-phi3
+WANDB_PROJECT_QWEN=science_socratic_qwen3-4b_instruct
 HF_TOKEN=...
 HF_HUB_REPO=Susu11/socratic-phi3
+HF_QWEN_REPO=Susu11/Science_Socratic_Qwen3-4B_Instruct
 ```
 
 `bash start.sh` sources `.env`. After each epoch the run should show:

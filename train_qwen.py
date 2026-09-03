@@ -39,6 +39,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
 DEFAULT_OUTPUT = ROOT / "socratic_qwen3_model"
 DEFAULT_HUB = "Susu11/Science_Socratic_Qwen3-4B_Instruct"
+DEFAULT_WANDB_PROJECT = "science_socratic_qwen3-4b_instruct"
 LORA_TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
 
@@ -46,6 +47,14 @@ def from_pretrained_qwen(model_id: str, **kwargs):
     kwargs.setdefault("attn_implementation", "eager")
     kwargs.setdefault("trust_remote_code", True)
     return AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+
+
+def apply_qwen_wandb_project() -> str:
+    """Use WANDB_PROJECT_QWEN so Qwen runs are not mixed into the Phi-3 W&B project."""
+    project = (os.environ.get("WANDB_PROJECT_QWEN") or "").strip() or DEFAULT_WANDB_PROJECT
+    os.environ["WANDB_PROJECT"] = project
+    print(f"W&B project (Qwen): {project}", flush=True)
+    return project
 
 
 def apply_sft_chat_template(tokenizer, messages: list) -> str:
@@ -128,7 +137,7 @@ After merge + convert: `python start.py --gguf --qwen`. Then point llama.cpp or 
 
 ## Eval
 
-Same ScienceQA 256-item slice as Phi-3: `python start.py --eval --qwen`. Compare `eval/scienceqa_acc` and `eval/scienceqa_sri` in W&B project `socratic-phi3`.
+Same ScienceQA 256-item slice as Phi-3: `python start.py --eval --qwen`. Compare `eval/scienceqa_acc` and `eval/scienceqa_sri` in W&B project `science_socratic_qwen3-4b_instruct` (`WANDB_PROJECT_QWEN`).
 """
     (output_dir / "README.md").write_text(card, encoding="utf-8")
 
@@ -177,6 +186,7 @@ def main() -> None:
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     os.environ["BASE_MODEL"] = args.model
     os.environ.setdefault("WANDB_RUN_NAME", "qwen3-4b-instruct-sft")
+    apply_qwen_wandb_project()
     ensure_qwen_secrets()
     if not args.push_to_hub:
         args.push_to_hub = os.environ.get("HF_QWEN_REPO", "") or DEFAULT_HUB

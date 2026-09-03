@@ -100,6 +100,8 @@ def ensure_secrets() -> None:
     load_dotenv_file()
     os.environ.setdefault("HF_DATASET_REPO", "Susu11/socraticfinetune")
     os.environ.setdefault("WANDB_PROJECT", "socratic-phi3")
+    if _need("WANDB_PROJECT_QWEN"):
+        os.environ["WANDB_PROJECT_QWEN"] = "science_socratic_qwen3-4b_instruct"
     if _need("HF_HUB_REPO"):
         os.environ["HF_HUB_REPO"] = "Susu11/socratic-phi3"
     if _need("HF_QWEN_REPO"):
@@ -455,7 +457,7 @@ def main() -> None:
         run(_python() + train)
         print(
             f"Done. Qwen adapters: {dest} | "
-            f"W&B: {_env('WANDB_PROJECT')} | Hub: {qwen_repo}"
+            f"W&B: {_env('WANDB_PROJECT_QWEN') or 'science_socratic_qwen3-4b_instruct'} | Hub: {qwen_repo}"
         )
         return
 

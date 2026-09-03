@@ -12,7 +12,7 @@ from transformers import AutoTokenizer, BitsAndBytesConfig
 
 from eval_scienceqa import load_eval_slice, ngram_overlap, run_scienceqa_eval
 from train import DEFAULT_DATA, init_wandb, log_scienceqa_to_wandb, wandb_enabled
-from train_qwen import DEFAULT_MODEL, DEFAULT_OUTPUT, from_pretrained_qwen
+from train_qwen import DEFAULT_MODEL, DEFAULT_OUTPUT, apply_qwen_wandb_project, from_pretrained_qwen
 
 ROOT = Path(__file__).resolve().parent
 
@@ -47,6 +47,7 @@ def load_adapters(adapter_dir: Path, base: str):
 def main() -> None:
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     os.environ.setdefault("WANDB_RUN_NAME", "qwen3-4b-instruct-eval")
+    apply_qwen_wandb_project()
     if not torch.cuda.is_available():
         raise SystemExit("Need a CUDA GPU for eval.")
     adapter = Path(os.environ.get("ADAPTER_DIR") or DEFAULT_OUTPUT)
