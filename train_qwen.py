@@ -52,7 +52,10 @@ def from_pretrained_qwen(model_id: str, **kwargs):
 def apply_qwen_wandb_project() -> str:
     """Use WANDB_PROJECT_QWEN so Qwen runs are not mixed into the Phi-3 W&B project."""
     project = (os.environ.get("WANDB_PROJECT_QWEN") or "").strip() or DEFAULT_WANDB_PROJECT
+    os.environ["WANDB_PROJECT_QWEN"] = project
     os.environ["WANDB_PROJECT"] = project
+    # Do not resume a run id that was started under socratic-phi3.
+    os.environ.pop("WANDB_RUN_ID", None)
     print(f"W&B project (Qwen): {project}", flush=True)
     return project
 

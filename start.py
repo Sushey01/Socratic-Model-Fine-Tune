@@ -96,6 +96,16 @@ def _write_env_key(key: str, value: str) -> None:
     ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def apply_qwen_wandb_env() -> str:
+    """Child train/eval inherit WANDB_PROJECT; .env often still has socratic-phi3."""
+    project = _env("WANDB_PROJECT_QWEN") or "science_socratic_qwen3-4b_instruct"
+    os.environ["WANDB_PROJECT_QWEN"] = project
+    os.environ["WANDB_PROJECT"] = project
+    os.environ.pop("WANDB_RUN_ID", None)
+    print(f"W&B project (Qwen): {project} (Phi-3 project is not used for this command)")
+    return project
+
+
 def ensure_secrets() -> None:
     load_dotenv_file()
     os.environ.setdefault("HF_DATASET_REPO", "Susu11/socraticfinetune")
@@ -409,6 +419,7 @@ def main() -> None:
         if nvidia_smi() is None and not cuda_ok():
             raise SystemExit("Need NVIDIA GPU for eval.")
         print("ScienceQA eval only on Qwen adapters (no training)...")
+        apply_qwen_wandb_env()
         run(_python() + [str(ROOT / "run_eval_qwen.py")])
         return
     if ns.eval:
@@ -454,6 +465,7 @@ def main() -> None:
             train.append("--no-resume")
         print("Starting Qwen3-4B-Instruct QLoRA + ScienceQA (W&B) + Hub push...")
         print("Phi-3 adapters and HF_HUB_REPO are left unchanged.")
+        apply_qwen_wandb_env()
         run(_python() + train)
         print(
             f"Done. Qwen adapters: {dest} | "
