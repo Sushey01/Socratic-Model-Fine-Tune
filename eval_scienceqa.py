@@ -159,19 +159,38 @@ def load_eval_slice(n: int = EVAL_N, seed: int = EVAL_SEED) -> list[dict]:
 
 def _generate(model, tokenizer, messages: list[dict], max_new_tokens: int) -> str:
     prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
     device = next(model.parameters()).device
     inputs = {k: v.to(device) for k, v in inputs.items()}
     pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
-    with torch.no_grad():
-        out = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            pad_token_id=pad_id,
-            use_cache=False,
-        )
+    gen_kw = dict(
+        max_new_tokens=max_new_tokens,
+        do_sample=False,
+        pad_token_id=pad_id,
+        use_cache=True,
+    )
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    with torch.inference_mode():
+        try:
+            out = model.generate(**inputs, **gen_kw)
+        except AttributeError as exc:
+            if "seen_tokens" not in str(exc):
+                raise
+            gen_kw["use_cache"] = False
+            out = model.generate(**inputs, **gen_kw)
+        except RuntimeError as exc:
+            if "out of memory" not in str(exc).lower():
+                raise
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
+            gen_kw["use_cache"] = False
+            gen_kw["max_new_tokens"] = min(max_new_tokens, 32)
+            out = model.generate(**inputs, **gen_kw)
     gen = out[0, inputs["input_ids"].shape[-1] :]
+    del out, inputs
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
     return tokenizer.decode(gen, skip_special_tokens=True).strip()
 
 
@@ -181,7 +200,7 @@ def run_scienceqa_eval(
     items: list[dict],
     *,
     exam_tokens: int = 32,
-    tutor_tokens: int = 128,
+    tutor_tokens: int = 64,
 ) -> dict:
     model.eval()
     correct = 0

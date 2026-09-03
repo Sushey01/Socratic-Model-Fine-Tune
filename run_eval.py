@@ -52,6 +52,7 @@ def load_adapters(adapter_dir: Path, base: str):
 
 
 def main() -> None:
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     if not torch.cuda.is_available():
         raise SystemExit("Need a CUDA GPU for eval.")
     adapter = Path(os.environ.get("ADAPTER_DIR") or DEFAULT_OUTPUT)
@@ -70,7 +71,7 @@ def main() -> None:
         if wandb.run is not None:
             wandb.summary["eval/ngram_overlap"] = overlap
             wandb.summary["eval/n"] = len(items)
-    print("Running ScienceQA (use_cache=False; can take a while)...", flush=True)
+    print("Running ScienceQA (KV cache on; can take a while)...", flush=True)
     metrics = run_scienceqa_eval(model, tok, items)
     print(
         f"ScienceQA acc={metrics['eval/scienceqa_acc']:.4f} "

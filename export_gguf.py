@@ -67,10 +67,19 @@ def ensure_llama_cpp() -> Path:
     return convert
 
 
+def ensure_sentencepiece() -> None:
+    try:
+        import sentencepiece  # noqa: F401
+    except ImportError:
+        print("Installing sentencepiece (required by llama.cpp Phi convert)...", flush=True)
+        _run([sys.executable, "-m", "pip", "install", "sentencepiece", "protobuf"])
+
+
 def convert_gguf(merged: Path) -> Path:
+    ensure_sentencepiece()
     convert = ensure_llama_cpp()
     GGUF_DIR.mkdir(parents=True, exist_ok=True)
-    out = GGUF_DIR / "socratic-phi3-q8_0.gguf"
+    last_err: Exception | None = None
     for outtype, name in (("q8_0", "socratic-phi3-q8_0.gguf"), ("f16", "socratic-phi3-f16.gguf")):
         dest = GGUF_DIR / name
         cmd = [sys.executable, str(convert), str(merged), "--outfile", str(dest), "--outtype", outtype]
@@ -78,9 +87,10 @@ def convert_gguf(merged: Path) -> Path:
             _run(cmd)
             print(f"Wrote {dest}", flush=True)
             return dest
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as exc:
+            last_err = exc
             print(f"convert --outtype {outtype} failed; trying next.", flush=True)
-    raise SystemExit("GGUF convert failed. Install git and retry; merge folder is kept.")
+    raise SystemExit(f"GGUF convert failed ({last_err}). merged_model/ is kept.")
 
 
 def upload(path: Path, repo_id: str) -> None:
@@ -105,7 +115,10 @@ def main() -> None:
     if not repo:
         raise SystemExit("Set HF_HUB_REPO.")
     skip_upload = os.environ.get("GGUF_SKIP_UPLOAD", "").strip() in {"1", "true", "yes"}
-    merge(adapter, base)
+    if (MERGED / "config.json").is_file():
+        print(f"Reusing existing merge at {MERGED}", flush=True)
+    else:
+        merge(adapter, base)
     gguf = convert_gguf(MERGED)
     if skip_upload:
         print("GGUF_SKIP_UPLOAD set; not pushing to Hub.")
