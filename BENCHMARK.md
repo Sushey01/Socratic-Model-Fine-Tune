@@ -2,7 +2,61 @@
 
 This document describes the **evaluation suite that actually runs in this repo** during fine-tune. It is a practical slice of a larger K-10 Socratic-tutor evaluation story (TutorBench, MRBench, SocraticBench). Those other suites need LLM-as-a-judge or two-model dialogue loops and are **not** scored after every epoch here.
 
-**Code:** [eval_scienceqa.py](eval_scienceqa.py) (dataset, metrics) and `ScienceQAEpochCallback` in [train.py](train.py) (after each epoch → W&B).
+**Code:** [eval_scienceqa.py](eval_scienceqa.py) (dataset, metrics), [run_eval.py](run_eval.py) (eval-only, no SFT), and `ScienceQAEpochCallback` in [train.py](train.py) (after each epoch → W&B).
+
+## Recorded result (adapters after 3-epoch QLoRA)
+
+First training run did **not** log ScienceQA (eval crashed). Re-run on the saved adapters, **no extra SFT**:
+
+```text
+uv run python start.py --eval
+```
+
+| Field | Value |
+| --- | --- |
+| Date | 2026-09-03 |
+| Machine | MSI (CUDA 12.4, torch 2.6.0+cu124) |
+| Adapters | local `socratic_finetuned_model` on [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) |
+| Slice | 256 items, seed 42, cache `scienceqa_n256_seed42.json` |
+| `eval/scienceqa_acc` | **0.6641** (170 / 256) |
+| `eval/scienceqa_sri` | **0.8945** (229 / 256) |
+| `eval/ngram_overlap` | **0.0000** |
+| W&B run | [clear-cosmos-3](https://wandb.ai/susmagar012-sunway-college-kathmandu/socratic-phi3/runs/ew9uy22h) (`ew9uy22h`) |
+| W&B project | [socratic-phi3](https://wandb.ai/susmagar012-sunway-college-kathmandu/socratic-phi3) |
+
+`epoch 3` in that W&B summary is leftover tagging from the trained adapters, not a new 3-epoch train.
+
+### How to read these two numbers
+
+- **Accuracy** is exam mode: “reply with a single letter.” Random 4-choice is ~25%. **66%** is clearly above chance on this **text-only** slice.
+- **SRI** is tutor mode: Socratic system prompt + “do not tell me which letter is correct.” **89%** means most replies did not paste the gold choice text or say “the answer is X.”
+- Do **not** compare 66% to public Phi-3 ScienceQA figures around **90%**. Those are typically **vision** models on the **full multimodal** test set. This suite **drops images**, uses **0-shot letter parsing**, and keeps only **natural science, grades 3–10**, **N = 256**.
+- There is still **no base-model control** on the same 256 items. Socratic SFT can lower letter-dumping accuracy while raising restraint. To study that later, run the same `run_eval.py` path on untuned Phi-3 (no PEFT).
+
+## How to study the eval later
+
+Re-run (needs the adapters on disk, or `python start.py --download-checkpoints`):
+
+```bash
+python start.py --eval
+# equivalent:
+uv run python run_eval.py
+```
+
+Walk the code in this order:
+
+| Step | Where | What happens |
+| --- | --- | --- |
+| 1. Load adapters | [run_eval.py](run_eval.py) `load_adapters` | 4-bit NF4 base + PEFT from `socratic_finetuned_model` |
+| 2. Build slice | [eval_scienceqa.py](eval_scienceqa.py) `load_eval_slice` | Hub `derek-thomas/ScienceQA` test split → natural science, grades 3–10 → sample 256 with seed 42 → cache JSON |
+| 3. Contamination | `ngram_overlap` | Fraction of eval questions whose 5-gram appears in [socratic_train.jsonl](socratic_train.jsonl) |
+| 4. Exam generate | `exam_user_prompt` + `_generate` (`exam_tokens=32`) | No Socratic system prompt; parse first A–D via `parse_letter` |
+| 5. Tutor generate | `SOCRATIC_SYSTEM` + `tutor_user_prompt` (`tutor_tokens=64`) | `sri_restrained` fails if gold **text** is in the reply or “answer is {letter}” |
+| 6. Log | `log_scienceqa_to_wandb` in [train.py](train.py) | `eval/scienceqa_acc`, `eval/scienceqa_sri`, `eval/n`, example table |
+
+Generation uses `use_cache=True` (faster KV cache). Fallbacks: `use_cache=False` on Phi-3 `seen_tokens` errors, shorter gens on CUDA OOM. A missing `flash_attn` print is a speed warning only.
+
+The first eight items (question, gold, pred, exam snippet, tutor snippet) are logged to W&B as `eval/scienceqa_examples`. Use that table to sanity-check parsing vs restraint.
 
 ## Why one dataset: ScienceQA
 
@@ -96,15 +150,22 @@ If `WANDB_API_KEY` is missing, the same metrics still **print in the terminal**.
 
 ## How to run (college GPU)
 
-**One command:** `bash start.sh` (prompts for W&B / HF tokens if needed). Do not run the `.ipynb` for this eval.
+**Train + per-epoch eval:** `python start.py` / `bash start.sh` (prompts for W&B / HF tokens if needed). Do not use the `.ipynb` as the main eval path.
+
+**Eval only** (this is what produced the recorded numbers):
+
+```bash
+python start.py --eval
+```
 
 ## Files
 
 | File | Role |
 | --- | --- |
 | [eval_scienceqa.py](eval_scienceqa.py) | Load/filter/sample ScienceQA; generate; score |
+| [run_eval.py](run_eval.py) | Load saved adapters; no SFT; log to W&B |
 | [train.py](train.py) | `ScienceQAEpochCallback` after each epoch |
-| [start.sh](start.sh) | Loads `.env` (`WANDB_PROJECT` defaults to `socratic-phi3`) |
+| [start.py](start.py) | `--eval` → `run_eval.py` |
 | [socratic_train.jsonl](socratic_train.jsonl) | SFT data (not the benchmark) |
 
 ## What this is not (later paper work)
@@ -119,4 +180,4 @@ Those remain valid for a final-year write-up; they are too heavy to attach to ev
 
 ## Suggested paper wording
 
-> We evaluate the LoRA-tuned Phi-3 Socratic tutor after each epoch on a fixed 256-item ScienceQA natural-science subset (grades 3–10). We report multiple-choice accuracy under an exam prompt and a Socratic Restraint Index under a non-revealing tutor prompt, logged to Weights & Biases. Five-gram overlap with the fine-tuning JSONL is reported as a contamination check. Full TutorBench/MRBench judge protocols are left to a separate, post-training study.
+> We evaluate the QLoRA-tuned Phi-3-mini (3.8B) Socratic tutor on a fixed 256-item ScienceQA natural-science subset (grades 3–10, text only, seed 42). We report multiple-choice accuracy under an exam prompt and a Socratic Restraint Index under a non-revealing tutor prompt, logged to Weights & Biases. On the saved adapters (eval-only, 2026-09-03) this slice scored 66.4% accuracy and 89.5% SRI, with 0% 5-gram overlap against the fine-tuning JSONL. Full TutorBench/MRBench judge protocols are left to a separate, post-training study.

@@ -76,7 +76,7 @@ After train, the **model** repo contains:
 | Layer | What | Use |
 | --- | --- | --- |
 | Deploy | PEFT adapters + tokenizer at **repo root** | Load LoRA on [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) |
-| GGUF | `gguf/*.gguf` **later** | llama.cpp / Ollama after `bash start.sh --gguf` |
+| GGUF | `gguf/socratic-phi3-q8_0.gguf` | llama.cpp / Ollama after `python start.py --gguf` (uploaded 2026-09-03) |
 
 Linked cards:
 
@@ -104,12 +104,20 @@ python start.py --eval    # ScienceQA acc/sri to W&B (no SFT)
 python start.py --gguf    # merge adapters, convert GGUF, upload to HF_HUB_REPO/gguf/
 ```
 
-Merge needs a lot of RAM. `--eval` uses `use_cache=False` so Phi-3 `DynamicCache.seen_tokens` does not crash.
+Merge needs a lot of RAM. `--eval` prefers KV cache (`use_cache=True`) and falls back if Phi-3 `seen_tokens` or CUDA OOM hits.
 
 `socratic_train_data.jsonl` is an older instruction-format file and is not used by `train.py`.
 
 ## ScienceQA benchmark (W&B)
 
-See **[BENCHMARK.md](BENCHMARK.md)** for dataset choice, metrics (accuracy + SRI), and W&B keys.
+See **[BENCHMARK.md](BENCHMARK.md)** to study the eval: metrics, code map, and the recorded adapter scores.
 
 After **each training epoch**, `train.py` scores a fixed **256-item** slice of [ScienceQA](https://huggingface.co/datasets/derek-thomas/ScienceQA) (natural science, grades 3–10) and logs `eval/scienceqa_acc`, `eval/scienceqa_sri`, and `eval/ngram_overlap` when `WANDB_API_KEY` is in `.env`.
+
+Eval-only (no SFT), after adapters exist:
+
+```bash
+python start.py --eval
+```
+
+**Recorded (2026-09-03, no extra train):** acc **0.6641**, SRI **0.8945**, n **256**, 5-gram overlap **0**. W&B: [clear-cosmos-3](https://wandb.ai/susmagar012-sunway-college-kathmandu/socratic-phi3/runs/ew9uy22h). Do not compare acc to public ~90% ScienceQA numbers (those are multimodal / different protocol). Full interpretation is in [BENCHMARK.md](BENCHMARK.md).
