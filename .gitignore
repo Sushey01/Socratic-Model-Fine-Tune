@@ -9,6 +9,8 @@ dist/
 .hf_token
 .huggingface/
 .cache/
+.llama.cpp/
+gguf/
 socratic_finetuned_model/
 socratic_mistral_lora_adapters/
 merged_model/

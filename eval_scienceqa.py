@@ -169,6 +169,7 @@ def _generate(model, tokenizer, messages: list[dict], max_new_tokens: int) -> st
             max_new_tokens=max_new_tokens,
             do_sample=False,
             pad_token_id=pad_id,
+            use_cache=False,
         )
     gen = out[0, inputs["input_ids"].shape[-1] :]
     return tokenizer.decode(gen, skip_special_tokens=True).strip()

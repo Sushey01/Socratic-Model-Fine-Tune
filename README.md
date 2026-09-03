@@ -51,6 +51,7 @@ powershell -ExecutionPolicy Bypass -File .\start.ps1
 ```bash
 python start.py --fresh
 python start.py --download-checkpoints
+python start.py --eval
 python start.py --gguf
 ```
 
@@ -96,7 +97,14 @@ git pull && bash start.sh --download-checkpoints
 
 ## GGUF after fine-tune
 
-Do not merge/quantize inside the default train command (easy OOM). When LoRA is done: `bash start.sh --gguf` prints merge → llama.cpp convert/quantize → upload to the same `HF_HUB_REPO`.
+Do **not** retrain to get GGUF. On the PC that has `socratic_finetuned_model` (or after `--download-checkpoints`):
+
+```bash
+python start.py --eval    # ScienceQA acc/sri to W&B (no SFT)
+python start.py --gguf    # merge adapters, convert GGUF, upload to HF_HUB_REPO/gguf/
+```
+
+Merge needs a lot of RAM. `--eval` uses `use_cache=False` so Phi-3 `DynamicCache.seen_tokens` does not crash.
 
 `socratic_train_data.jsonl` is an older instruction-format file and is not used by `train.py`.
 

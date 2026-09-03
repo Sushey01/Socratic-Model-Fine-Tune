@@ -368,19 +368,28 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="SFT + ScienceQA/W&B + Hugging Face push")
     parser.add_argument("--fresh", action="store_true")
     parser.add_argument("--download-checkpoints", action="store_true")
+    parser.add_argument("--eval", action="store_true", help="ScienceQA only on saved adapters (no SFT)")
     parser.add_argument("--gguf", action="store_true")
     ns = parser.parse_args()
 
-    if ns.gguf:
-        print(
-            "GGUF is a follow-up after LoRA, not part of default train.\n"
-            "1. Merge adapters in ./socratic_finetuned_model into microsoft/Phi-3-mini-4k-instruct\n"
-            "2. llama.cpp convert_hf_to_gguf.py + quantize (e.g. Q4_K_M)\n"
-            "3. Upload gguf/socratic-phi3-q4_k_m.gguf to HF_HUB_REPO"
-        )
-        return
-
     os.chdir(ROOT)
+    if ns.gguf:
+        ensure_secrets()
+        bootstrap_runtime()
+        sync_deps()
+        print("Merging adapters, converting GGUF, uploading to Hub...")
+        run(_python() + [str(ROOT / "export_gguf.py")])
+        return
+    if ns.eval:
+        ensure_secrets()
+        bootstrap_runtime()
+        sync_deps()
+        maybe_cuda_wheel()
+        if nvidia_smi() is None and not cuda_ok():
+            raise SystemExit("Need NVIDIA GPU for eval.")
+        print("ScienceQA eval only (no training)...")
+        run(_python() + [str(ROOT / "run_eval.py")])
+        return
     ensure_secrets()
     bootstrap_runtime()
     sync_deps()
