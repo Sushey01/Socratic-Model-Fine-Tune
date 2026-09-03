@@ -143,6 +143,8 @@ Code: [train_qwen.py](train_qwen.py) (professional Hub card on push), [run_eval_
 
 ## ScienceQA benchmark (W&B)
 
+See **[TRAINING_FOR_BEGINNERS.md](TRAINING_FOR_BEGINNERS.md)** if you are new: why ScienceQA runs after each epoch, and what train loss vs token accuracy vs exam acc/SRI mean.
+
 See **[BENCHMARK.md](BENCHMARK.md)** to study the eval: metrics, code map, and the recorded adapter scores.
 
 After **each training epoch**, `train.py` scores a fixed **256-item** slice of [ScienceQA](https://huggingface.co/datasets/derek-thomas/ScienceQA) (natural science, grades 3–10) and logs `eval/scienceqa_acc`, `eval/scienceqa_sri`, and `eval/ngram_overlap` when `WANDB_API_KEY` is in `.env`.
