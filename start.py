@@ -102,6 +102,8 @@ def ensure_secrets() -> None:
     os.environ.setdefault("WANDB_PROJECT", "socratic-phi3")
     if _need("HF_HUB_REPO"):
         os.environ["HF_HUB_REPO"] = "Susu11/socratic-phi3"
+    if _need("HF_QWEN_REPO"):
+        os.environ["HF_QWEN_REPO"] = "Susu11/socratic-qwen3"
 
     if _env("WANDB_API_KEY"):
         print("Using WANDB_API_KEY from .env")
@@ -370,15 +372,37 @@ def main() -> None:
     parser.add_argument("--download-checkpoints", action="store_true")
     parser.add_argument("--eval", action="store_true", help="ScienceQA only on saved adapters (no SFT)")
     parser.add_argument("--gguf", action="store_true")
+    parser.add_argument(
+        "--qwen",
+        action="store_true",
+        help="Qwen3-4B-Instruct-2507 path (train, or eval with --eval). Does not overwrite Phi-3.",
+    )
+    parser.add_argument(
+        "--eval-qwen",
+        action="store_true",
+        help="ScienceQA on socratic_qwen3_model (same as --eval --qwen)",
+    )
     ns = parser.parse_args()
 
     os.chdir(ROOT)
+    if ns.gguf and ns.qwen:
+        raise SystemExit("GGUF export is Phi-3 only for now. Use --qwen without --gguf.")
     if ns.gguf:
         ensure_secrets()
         bootstrap_runtime()
         sync_deps()
         print("Merging adapters, converting GGUF, uploading to Hub...")
         run(_python() + [str(ROOT / "export_gguf.py")])
+        return
+    if ns.eval_qwen or (ns.eval and ns.qwen):
+        ensure_secrets()
+        bootstrap_runtime()
+        sync_deps()
+        maybe_cuda_wheel()
+        if nvidia_smi() is None and not cuda_ok():
+            raise SystemExit("Need NVIDIA GPU for eval.")
+        print("ScienceQA eval only on Qwen adapters (no training)...")
+        run(_python() + [str(ROOT / "run_eval_qwen.py")])
         return
     if ns.eval:
         ensure_secrets()
@@ -404,6 +428,31 @@ def main() -> None:
             file=sys.stderr,
         )
         raise SystemExit(1)
+
+    if ns.qwen:
+        qwen_repo = _env("HF_QWEN_REPO") or "Susu11/socratic-qwen3"
+        dest = ROOT / "socratic_qwen3_model"
+        if ns.download_checkpoints:
+            print(f"Downloading Qwen adapters from {qwen_repo} ...")
+            run(
+                _python()
+                + [
+                    "-c",
+                    "from huggingface_hub import snapshot_download; "
+                    f"snapshot_download(repo_id={qwen_repo!r}, local_dir={str(dest)!r})",
+                ]
+            )
+        train = [str(ROOT / "train_qwen.py"), "--push-to-hub", qwen_repo]
+        if ns.fresh:
+            train.append("--no-resume")
+        print("Starting Qwen3-4B-Instruct QLoRA + ScienceQA (W&B) + Hub push...")
+        print("Phi-3 adapters and HF_HUB_REPO are left unchanged.")
+        run(_python() + train)
+        print(
+            f"Done. Qwen adapters: {dest} | "
+            f"W&B: {_env('WANDB_PROJECT')} | Hub: {qwen_repo}"
+        )
+        return
 
     if ns.download_checkpoints:
         repo = _env("HF_HUB_REPO")

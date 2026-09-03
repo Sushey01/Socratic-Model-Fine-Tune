@@ -58,6 +58,19 @@ Generation uses `use_cache=True` (faster KV cache). Fallbacks: `use_cache=False`
 
 The first eight items (question, gold, pred, exam snippet, tutor snippet) are logged to W&B as `eval/scienceqa_examples`. Use that table to sanity-check parsing vs restraint.
 
+## Second base: Qwen3-4B-Instruct-2507
+
+Phi-3 stays the published baseline. To compare on the **same** 256-item cache:
+
+```bash
+python start.py --qwen
+python start.py --eval --qwen
+```
+
+Adapters go to `socratic_qwen3_model/` and Hub `HF_QWEN_REPO` (default `Susu11/socratic-qwen3`). [train_qwen.py](train_qwen.py) is QLoRA (4-bit NF4 + LoRA). The base is [Qwen/Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) (**no thinking mode**). Do not use `Qwen3-4B-Thinking-2507`.
+
+Until that run is logged, only the Phi-3 numbers in the table above are recorded.
+
 ## Why one dataset: ScienceQA
 
 | Need | ScienceQA | Not used per epoch |
@@ -165,7 +178,9 @@ python start.py --eval
 | [eval_scienceqa.py](eval_scienceqa.py) | Load/filter/sample ScienceQA; generate; score |
 | [run_eval.py](run_eval.py) | Load saved adapters; no SFT; log to W&B |
 | [train.py](train.py) | `ScienceQAEpochCallback` after each epoch |
-| [start.py](start.py) | `--eval` → `run_eval.py` |
+| [train_qwen.py](train_qwen.py) | QLoRA SFT on Qwen3-4B-Instruct-2507 |
+| [run_eval_qwen.py](run_eval_qwen.py) | ScienceQA on `socratic_qwen3_model` |
+| [start.py](start.py) | `--eval` → Phi-3; `--qwen` / `--eval --qwen` → Qwen |
 | [socratic_train.jsonl](socratic_train.jsonl) | SFT data (not the benchmark) |
 
 ## What this is not (later paper work)

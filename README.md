@@ -28,6 +28,7 @@ Each line must be `NAME=value` (quotes optional):
 WANDB_API_KEY=...
 HF_TOKEN=hf_...
 HF_HUB_REPO=Susu11/socratic-phi3
+HF_QWEN_REPO=Susu11/socratic-qwen3
 HF_DATASET_REPO=Susu11/socraticfinetune
 WANDB_PROJECT=socratic-phi3
 ```
@@ -53,6 +54,8 @@ python start.py --fresh
 python start.py --download-checkpoints
 python start.py --eval
 python start.py --gguf
+python start.py --qwen          # Qwen3-4B-Instruct QLoRA (does not overwrite Phi-3)
+python start.py --eval --qwen   # ScienceQA on socratic_qwen3_model
 ```
 
 ## Hugging Face
@@ -62,7 +65,8 @@ Keep a local `.env` (gitignored). Do **not** commit it. On the college PC, creat
 | Variable | Example | What |
 | --- | --- | --- |
 | `HF_DATASET_REPO` | `Susu11/socraticfinetune` | JSONL via Python Hub API |
-| `HF_HUB_REPO` | `Susu11/socratic-phi3` | **Final** LoRA adapters after train (not step checkpoints) |
+| `HF_HUB_REPO` | `Susu11/socratic-phi3` | **Final** Phi-3 LoRA adapters after train (not step checkpoints) |
+| `HF_QWEN_REPO` | `Susu11/socratic-qwen3` | **Final** Qwen3 Instruct LoRA adapters (`python start.py --qwen`) |
 | `HF_TOKEN` | `hf_...` **without a `#` in front** | Write token; `start.py` reads `.env` |
 | `WANDB_API_KEY` | from wandb.ai | Logs ScienceQA after every epoch |
 | `WANDB_PROJECT` | `socratic-phi3` | W&B project name (optional) |
@@ -107,6 +111,17 @@ python start.py --gguf    # merge adapters, convert GGUF, upload to HF_HUB_REPO/
 Merge needs a lot of RAM. `--eval` prefers KV cache (`use_cache=True`) and falls back if Phi-3 `seen_tokens` or CUDA OOM hits.
 
 `socratic_train_data.jsonl` is an older instruction-format file and is not used by `train.py`.
+
+## Qwen3-4B-Instruct (second base, optional)
+
+Do **not** retrain Phi-3 to try Qwen. Instruct-2507 is **non-thinking** (the Thinking-2507 repo is a different model; do not use it here). Same JSONL, same ScienceQA 256 slice, separate disk and Hub:
+
+```bash
+python start.py --qwen              # QLoRA → socratic_qwen3_model → HF_QWEN_REPO
+python start.py --eval --qwen       # ScienceQA acc/sri on those adapters
+```
+
+Code: [train_qwen.py](train_qwen.py), [run_eval_qwen.py](run_eval_qwen.py). Needs `transformers>=4.51`. GGUF export is still Phi-3 only.
 
 ## ScienceQA benchmark (W&B)
 
