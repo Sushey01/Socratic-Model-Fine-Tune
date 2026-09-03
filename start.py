@@ -103,7 +103,7 @@ def ensure_secrets() -> None:
     if _need("HF_HUB_REPO"):
         os.environ["HF_HUB_REPO"] = "Susu11/socratic-phi3"
     if _need("HF_QWEN_REPO"):
-        os.environ["HF_QWEN_REPO"] = "Susu11/socratic-qwen3"
+        os.environ["HF_QWEN_REPO"] = "Susu11/Science_Socratic_Qwen3-4B_Instruct"
 
     if _env("WANDB_API_KEY"):
         print("Using WANDB_API_KEY from .env")
@@ -385,8 +385,13 @@ def main() -> None:
     ns = parser.parse_args()
 
     os.chdir(ROOT)
-    if ns.gguf and ns.qwen:
-        raise SystemExit("GGUF export is Phi-3 only for now. Use --qwen without --gguf.")
+    if ns.gguf and (ns.qwen or ns.eval_qwen):
+        ensure_secrets()
+        bootstrap_runtime()
+        sync_deps()
+        print("Merging Qwen adapters, converting GGUF, uploading to HF_QWEN_REPO...")
+        run(_python() + [str(ROOT / "export_gguf_qwen.py")])
+        return
     if ns.gguf:
         ensure_secrets()
         bootstrap_runtime()
@@ -430,7 +435,7 @@ def main() -> None:
         raise SystemExit(1)
 
     if ns.qwen:
-        qwen_repo = _env("HF_QWEN_REPO") or "Susu11/socratic-qwen3"
+        qwen_repo = _env("HF_QWEN_REPO") or "Susu11/Science_Socratic_Qwen3-4B_Instruct"
         dest = ROOT / "socratic_qwen3_model"
         if ns.download_checkpoints:
             print(f"Downloading Qwen adapters from {qwen_repo} ...")

@@ -20,6 +20,8 @@ bash start.sh
 
 ### `.env` is used automatically
 
+`.env` is **gitignored** and is **not** on GitHub. `git pull` never restores it. Keep a copy in a password manager. Repo template (no secrets): [`.env.example`](.env.example). Do not replace `.env` with the example.
+
 If `.env` already has `WANDB_API_KEY` and `HF_TOKEN` (no `#` in front of those lines), **`start.py` will not ask you to paste keys**. You should see `Using WANDB_API_KEY from .env` and `Using HF_TOKEN from .env`. It only prompts when a key is missing or commented out.
 
 Each line must be `NAME=value` (quotes optional):
@@ -28,7 +30,7 @@ Each line must be `NAME=value` (quotes optional):
 WANDB_API_KEY=...
 HF_TOKEN=hf_...
 HF_HUB_REPO=Susu11/socratic-phi3
-HF_QWEN_REPO=Susu11/socratic-qwen3
+HF_QWEN_REPO=Susu11/Science_Socratic_Qwen3-4B_Instruct
 HF_DATASET_REPO=Susu11/socraticfinetune
 WANDB_PROJECT=socratic-phi3
 ```
@@ -56,6 +58,7 @@ python start.py --eval
 python start.py --gguf
 python start.py --qwen          # Qwen3-4B-Instruct QLoRA (does not overwrite Phi-3)
 python start.py --eval --qwen   # ScienceQA on socratic_qwen3_model
+python start.py --gguf --qwen   # Qwen GGUF → HF_QWEN_REPO (not Phi-3)
 ```
 
 ## Hugging Face
@@ -66,7 +69,7 @@ Keep a local `.env` (gitignored). Do **not** commit it. On the college PC, creat
 | --- | --- | --- |
 | `HF_DATASET_REPO` | `Susu11/socraticfinetune` | JSONL via Python Hub API |
 | `HF_HUB_REPO` | `Susu11/socratic-phi3` | **Final** Phi-3 LoRA adapters after train (not step checkpoints) |
-| `HF_QWEN_REPO` | `Susu11/socratic-qwen3` | **Final** Qwen3 Instruct LoRA adapters (`python start.py --qwen`) |
+| `HF_QWEN_REPO` | `Susu11/Science_Socratic_Qwen3-4B_Instruct` | **Final** Qwen3 Instruct LoRA adapters (`python start.py --qwen`) |
 | `HF_TOKEN` | `hf_...` **without a `#` in front** | Write token; `start.py` reads `.env` |
 | `WANDB_API_KEY` | from wandb.ai | Logs ScienceQA after every epoch |
 | `WANDB_PROJECT` | `socratic-phi3` | W&B project name (optional) |
@@ -112,16 +115,29 @@ Merge needs a lot of RAM. `--eval` prefers KV cache (`use_cache=True`) and falls
 
 `socratic_train_data.jsonl` is an older instruction-format file and is not used by `train.py`.
 
-## Qwen3-4B-Instruct (second base, optional)
+## Qwen3-4B-Instruct (separate Hub repo + deploy)
 
-Do **not** retrain Phi-3 to try Qwen. Instruct-2507 is **non-thinking** (the Thinking-2507 repo is a different model; do not use it here). Same JSONL, same ScienceQA 256 slice, separate disk and Hub:
+**Yes — Qwen must use a different Hugging Face model repo.** Phi-3 stays at `HF_HUB_REPO` (`Susu11/socratic-phi3`). Qwen adapters, model card, and GGUF go to `HF_QWEN_REPO` (`Susu11/Science_Socratic_Qwen3-4B_Instruct`). The same `HF_TOKEN` can write to both; the **repo ids must not be mixed**.
+
+| Artifact | Env | Default Hub |
+| --- | --- | --- |
+| Dataset JSONL | `HF_DATASET_REPO` | `Susu11/socraticfinetune` |
+| Phi-3 PEFT + GGUF | `HF_HUB_REPO` | `Susu11/socratic-phi3` |
+| Qwen3 Instruct PEFT + GGUF | `HF_QWEN_REPO` | `Susu11/Science_Socratic_Qwen3-4B_Instruct` |
+
+Add `HF_QWEN_REPO=Susu11/Science_Socratic_Qwen3-4B_Instruct` to `.env` (created private on first push). Instruct-2507 is **non-thinking**. Same JSONL and ScienceQA slice as Phi-3.
 
 ```bash
 python start.py --qwen              # QLoRA → socratic_qwen3_model → HF_QWEN_REPO
-python start.py --eval --qwen       # ScienceQA acc/sri on those adapters
+python start.py --eval --qwen       # ScienceQA acc/sri
+python start.py --gguf --qwen       # merge → GGUF → HF_QWEN_REPO/gguf/
+uv run python infer_qwen.py         # GPU smoke test from local adapters
+uv run python infer_qwen.py --hub   # load adapters from HF_QWEN_REPO
 ```
 
-Code: [train_qwen.py](train_qwen.py), [run_eval_qwen.py](run_eval_qwen.py). Needs `transformers>=4.51`. GGUF export is still Phi-3 only.
+Code: [train_qwen.py](train_qwen.py) (professional Hub card on push), [run_eval_qwen.py](run_eval_qwen.py), [export_gguf_qwen.py](export_gguf_qwen.py), [infer_qwen.py](infer_qwen.py). Needs `transformers>=4.51`. Merge uses `merged_model_qwen/` so Phi-3 `merged_model/` is untouched.
+
+**Deploy:** PEFT on GPU via `infer_qwen.py` or the snippet on the Hub card; local/edge via the Qwen GGUF in llama.cpp or Ollama after `--gguf --qwen`.
 
 ## ScienceQA benchmark (W&B)
 

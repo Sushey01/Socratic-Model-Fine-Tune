@@ -139,7 +139,7 @@ def _hub_checkpoint_names(api, repo_id: str) -> list[str]:
     return sorted(names)
 
 
-def push_output(output_dir: Path, repo_id: str, base_model: str) -> None:
+def push_output(output_dir: Path, repo_id: str, base_model: str, write_card=None) -> None:
     from huggingface_hub import HfApi, login
 
     token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
@@ -148,7 +148,7 @@ def push_output(output_dir: Path, repo_id: str, base_model: str) -> None:
     api = HfApi()
     api.create_repo(repo_id, exist_ok=True, repo_type="model", private=True)
 
-    write_model_card(output_dir, repo_id, base_model)
+    (write_card or write_model_card)(output_dir, repo_id, base_model)
 
     print(f"Uploading final adapters + tokenizer (no checkpoints) to {repo_id}")
     api.upload_folder(

@@ -2,7 +2,7 @@
 """QLoRA SFT of Qwen3-4B-Instruct-2507 as a Grade 10 Socratic science tutor.
 
 Does not touch Phi-3 adapters (`socratic_finetuned_model` / HF_HUB_REPO).
-Output: ./socratic_qwen3_model  Hub: HF_QWEN_REPO (default Susu11/socratic-qwen3).
+Output: ./socratic_qwen3_model  Hub: HF_QWEN_REPO (default Susu11/Science_Socratic_Qwen3-4B_Instruct).
 
 This is the instruct / non-thinking checkpoint. Do not point --model at
 Qwen3-4B-Thinking-2507 (hidden CoT would spoil Socratic restraint).
@@ -38,7 +38,7 @@ from train import (
 ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
 DEFAULT_OUTPUT = ROOT / "socratic_qwen3_model"
-DEFAULT_HUB = "Susu11/socratic-qwen3"
+DEFAULT_HUB = "Susu11/Science_Socratic_Qwen3-4B_Instruct"
 LORA_TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
 
@@ -55,6 +55,83 @@ def apply_sft_chat_template(tokenizer, messages: list) -> str:
         return tokenizer.apply_chat_template(messages, enable_thinking=False, **kw)
     except TypeError:
         return tokenizer.apply_chat_template(messages, **kw)
+
+
+def write_qwen_model_card(output_dir: Path, repo_id: str, base_model: str) -> None:
+    card = f"""---
+library_name: peft
+base_model: {base_model}
+license: apache-2.0
+pipeline_tag: text-generation
+tags:
+  - qwen3
+  - qlora
+  - sft
+  - socratic
+  - education
+  - science
+---
+
+# {repo_id}
+
+QLoRA adapters for a **Grade 10 Socratic science tutor** on [{base_model}](https://huggingface.co/{base_model}).
+
+This Hub repo is **Qwen-only**. Phi-3 adapters live in a separate model repo (`HF_HUB_REPO`). GitHub [Sushey01/Socratic-Model-Fine-Tune](https://github.com/Sushey01/Socratic-Model-Fine-Tune) holds code and JSONL; this repo holds **weights**.
+
+## What is uploaded
+
+| Path | Contents |
+| --- | --- |
+| Repo root | Final PEFT adapters + tokenizer after SFT |
+| `gguf/` | Optional Q8_0/F16 GGUF after `python start.py --gguf --qwen` |
+
+Trainer `checkpoint-*` folders stay on the training PC (`socratic_qwen3_model/`) and are **not** uploaded.
+
+## Base model
+
+- Instruct / **non-thinking** checkpoint only (no `<think>` blocks).
+- Do not load these adapters on `Qwen3-4B-Thinking-2507`.
+
+## Train (QLoRA)
+
+4-bit NF4 + LoRA (`r=8`, `alpha=16`) via `python start.py --qwen` → [train_qwen.py](https://github.com/Sushey01/Socratic-Model-Fine-Tune/blob/main/train_qwen.py). Data: [Susu11/socraticfinetune](https://huggingface.co/datasets/Susu11/socraticfinetune).
+
+## Deploy (Python / GPU)
+
+```python
+import torch
+from peft import PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+base = "{base_model}"
+adapter = "{repo_id}"
+tok = AutoTokenizer.from_pretrained(adapter, trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained(
+    base, torch_dtype=torch.bfloat16, device_map="auto", trust_remote_code=True
+)
+model = PeftModel.from_pretrained(model, adapter)
+messages = [
+    {{"role": "system", "content": "You are a Socratic Science Tutor for a Grade 10 student. Never give the final answer directly."}},
+    {{"role": "user", "content": "Why does ice float?"}},
+]
+text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+inputs = tok(text, return_tensors="pt").to(model.device)
+out = model.generate(**inputs, max_new_tokens=128, do_sample=False)
+print(tok.decode(out[0, inputs.input_ids.shape[-1]:], skip_special_tokens=True))
+```
+
+Local helper: `uv run python infer_qwen.py` after adapters exist.
+
+## Deploy (llama.cpp / Ollama)
+
+After merge + convert: `python start.py --gguf --qwen`. Then point llama.cpp or Ollama at `gguf/socratic-qwen3-q8_0.gguf` on this repo.
+
+## Eval
+
+Same ScienceQA 256-item slice as Phi-3: `python start.py --eval --qwen`. Compare `eval/scienceqa_acc` and `eval/scienceqa_sri` in W&B project `socratic-phi3`.
+"""
+    (output_dir / "README.md").write_text(card, encoding="utf-8")
+
 
 
 def ensure_qwen_secrets() -> None:
@@ -219,7 +296,7 @@ def main() -> None:
         )
     if repo_id and token:
         os.environ["HF_TOKEN"] = token
-        push_output(args.output_dir, repo_id, args.model)
+        push_output(args.output_dir, repo_id, args.model, write_card=write_qwen_model_card)
     elif repo_id:
         print("Skipping Hub upload: no HF_TOKEN after prompt.")
     else:
