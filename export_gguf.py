@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 import torch
-from huggingface_hub import HfApi, login
+from huggingface_hub import HfApi, hf_hub_download, login
 from peft import PeftModel
 from transformers import AutoTokenizer
 
@@ -52,8 +52,25 @@ def merge(adapter: Path, base: str) -> Path:
     MERGED.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(str(MERGED), safe_serialization=True)
     tok.save_pretrained(str(MERGED))
+    ensure_tokenizer_model(MERGED, base, adapter)
     print(f"Merged weights in {MERGED}", flush=True)
     return MERGED
+
+
+def ensure_tokenizer_model(merged: Path, base: str, adapter: Path) -> None:
+    """llama.cpp Phi convert requires SentencePiece tokenizer.model; HF save_pretrained often omits it."""
+    dest = merged / "tokenizer.model"
+    if dest.is_file() and dest.stat().st_size > 0:
+        return
+    for src in (adapter / "tokenizer.model", DEFAULT_OUTPUT / "tokenizer.model"):
+        if src.is_file() and src.resolve() != dest.resolve():
+            shutil.copy2(src, dest)
+            print(f"Copied tokenizer.model from {src}", flush=True)
+            return
+    print(f"Downloading tokenizer.model from {base} ...", flush=True)
+    cached = hf_hub_download(repo_id=base, filename="tokenizer.model")
+    shutil.copy2(cached, dest)
+    print(f"Wrote {dest}", flush=True)
 
 
 def ensure_llama_cpp() -> Path:
@@ -117,6 +134,7 @@ def main() -> None:
     skip_upload = os.environ.get("GGUF_SKIP_UPLOAD", "").strip() in {"1", "true", "yes"}
     if (MERGED / "config.json").is_file():
         print(f"Reusing existing merge at {MERGED}", flush=True)
+        ensure_tokenizer_model(MERGED, base, adapter)
     else:
         merge(adapter, base)
     gguf = convert_gguf(MERGED)
