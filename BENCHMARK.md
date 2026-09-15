@@ -181,7 +181,7 @@ python start.py --eval
 | [run_eval.py](run_eval.py) | Load saved adapters; no SFT; log to W&B |
 | [train.py](train.py) | `ScienceQAEpochCallback` after each epoch |
 | [train_qwen.py](train_qwen.py) | QLoRA SFT on Qwen3-4B-Instruct-2507 |
-| [train_qwen25.py](train_qwen25.py) | QLoRA SFT on Qwen2.5-7B-Instruct (v4 JSONL) |
+| [train_qwen25.py](train_qwen25.py) | QLoRA SFT on Qwen2.5-7B-Instruct (v7 train JSONL) |
 | [run_eval_qwen.py](run_eval_qwen.py) | ScienceQA on `socratic_qwen3_model` |
 | [run_eval_qwen25.py](run_eval_qwen25.py) | ScienceQA on `socratic_qwen25_7b_model` |
 | [start.py](start.py) | `--eval` → Phi-3; `--qwen` → 4B; `--qwen25` → 7B |

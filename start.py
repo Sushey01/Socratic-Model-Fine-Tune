@@ -124,7 +124,9 @@ def ensure_secrets() -> None:
     if _need("WANDB_PROJECT_QWEN25"):
         os.environ["WANDB_PROJECT_QWEN25"] = "science_socratic_qwen25-7b_instruct"
     if _need("HF_QWEN25_REPO"):
-        os.environ["HF_QWEN25_REPO"] = "Susu11/Science_Socratic_Qwen2.5-7B_Instruct"
+        os.environ["HF_QWEN25_REPO"] = "Susu11/qwen2.5-7b-socratic-tutor"
+    if _need("HF_QWEN25_DATASET_REPO"):
+        os.environ["HF_QWEN25_DATASET_REPO"] = "Susu11/qwen-socratic-tutor"
     if _need("HF_HUB_REPO"):
         os.environ["HF_HUB_REPO"] = "Susu11/socratic-phi3"
     if _need("HF_QWEN_REPO"):
@@ -473,29 +475,19 @@ def main() -> None:
     sync_deps()
 
     if ns.qwen25:
-        v4_src = ROOT / "socratic_dataset_v4_annotated.jsonl"
-        if v4_src.is_file():
-            print("Converting v4 turns JSONL to SFT messages...")
-            run(_python() + [str(ROOT / "convert_v4_to_sft.py")])
-
-    print("Uploading JSONL via Hugging Face Python API (no hf CLI)...")
-    run(_python() + [str(ROOT / "upload_dataset.py")])
-
-    maybe_cuda_wheel()
-    if nvidia_smi() is None and not cuda_ok():
-        print(
-            "nvidia-smi not found and PyTorch has no CUDA. Install NVIDIA drivers, or train in WSL2/Linux.",
-            file=sys.stderr,
-        )
-        raise SystemExit(1)
-
-    if ns.qwen25:
-        v4_sft = ROOT / "socratic_train_v4.jsonl"
-        if not v4_sft.is_file():
-            raise SystemExit(
-                f"Missing {v4_sft}. Copy socratic_dataset_v4_annotated.jsonl here and retry."
+        maybe_cuda_wheel()
+        if nvidia_smi() is None and not cuda_ok():
+            print(
+                "nvidia-smi not found and PyTorch has no CUDA. Install NVIDIA drivers, or train in WSL2/Linux.",
+                file=sys.stderr,
             )
-        qwen_repo = _env("HF_QWEN25_REPO") or "Susu11/Science_Socratic_Qwen2.5-7B_Instruct"
+            raise SystemExit(1)
+        v7_sft = ROOT / "dataset7b" / "socratic_v7_train.jsonl"
+        if not v7_sft.is_file():
+            raise SystemExit(
+                f"Missing {v7_sft}. Keep v7 train JSONL in dataset7b/ (already messages; no convert)."
+            )
+        qwen_repo = _env("HF_QWEN25_REPO") or "Susu11/qwen2.5-7b-socratic-tutor"
         dest = ROOT / "socratic_qwen25_7b_model"
         if ns.download_checkpoints:
             print(f"Downloading Qwen2.5-7B adapters from {qwen_repo} ...")
@@ -507,11 +499,17 @@ def main() -> None:
                     f"snapshot_download(repo_id={qwen_repo!r}, local_dir={str(dest)!r})",
                 ]
             )
-        train = [str(ROOT / "train_qwen25.py"), "--push-to-hub", qwen_repo]
+        train = [
+            str(ROOT / "train_qwen25.py"),
+            "--push-to-hub",
+            qwen_repo,
+            "--data",
+            str(v7_sft),
+        ]
         if ns.fresh:
             train.append("--no-resume")
-        print("Starting Qwen2.5-7B-Instruct QLoRA + ScienceQA (W&B) + Hub push...")
-        print("Phi-3 and Qwen3-4B adapters/repos are left unchanged.")
+        print("Starting Qwen2.5-7B-Instruct QLoRA on v7 train (ScienceQA + Hub adapters)...")
+        print("Phi-3 / Qwen3-4B adapters and socraticfinetune JSONL are left unchanged.")
         apply_qwen25_wandb_env()
         run(_python() + train)
         print(
@@ -519,6 +517,17 @@ def main() -> None:
             f"W&B: {_env('WANDB_PROJECT_QWEN25') or 'science_socratic_qwen25-7b_instruct'} | Hub: {qwen_repo}"
         )
         return
+
+    print("Uploading JSONL via Hugging Face Python API (no hf CLI)...")
+    run(_python() + [str(ROOT / "upload_dataset.py")])
+
+    maybe_cuda_wheel()
+    if nvidia_smi() is None and not cuda_ok():
+        print(
+            "nvidia-smi not found and PyTorch has no CUDA. Install NVIDIA drivers, or train in WSL2/Linux.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
     if ns.qwen:
         qwen_repo = _env("HF_QWEN_REPO") or "Susu11/Science_Socratic_Qwen3-4B_Instruct"

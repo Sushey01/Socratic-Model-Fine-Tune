@@ -10,6 +10,32 @@ from pathlib import Path
 from huggingface_hub import HfApi, login
 
 ROOT = Path(__file__).resolve().parent
+
+
+def _load_dotenv() -> None:
+    env_path = ROOT / ".env"
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(env_path, override=False)
+        return
+    except ImportError:
+        pass
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text(encoding="utf-8-sig").splitlines():
+        s = line.strip().lstrip("\ufeff")
+        if not s or s.startswith("#") or "=" not in s:
+            continue
+        if s.startswith("export "):
+            s = s[7:].strip()
+        key, _, val = s.partition("=")
+        key = key.strip()
+        val = val.strip().strip("'").strip('"')
+        if key and key not in os.environ:
+            os.environ[key] = val
+
+
 DIR = ROOT / "dataset7b"
 DEFAULT_REPO = "Susu11/qwen-socratic-tutor"
 FILES = (
@@ -20,6 +46,7 @@ FILES = (
 
 
 def main() -> None:
+    _load_dotenv()
     token = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
     repo = (os.environ.get("HF_QWEN25_DATASET_REPO") or DEFAULT_REPO).strip()
     if not token:
