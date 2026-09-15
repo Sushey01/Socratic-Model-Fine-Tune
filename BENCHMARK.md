@@ -181,9 +181,11 @@ python start.py --eval
 | [run_eval.py](run_eval.py) | Load saved adapters; no SFT; log to W&B |
 | [train.py](train.py) | `ScienceQAEpochCallback` after each epoch |
 | [train_qwen.py](train_qwen.py) | QLoRA SFT on Qwen3-4B-Instruct-2507 |
+| [train_qwen25.py](train_qwen25.py) | QLoRA SFT on Qwen2.5-7B-Instruct (v4 JSONL) |
 | [run_eval_qwen.py](run_eval_qwen.py) | ScienceQA on `socratic_qwen3_model` |
-| [start.py](start.py) | `--eval` → Phi-3; `--qwen` / `--eval --qwen` → Qwen |
-| [socratic_train.jsonl](socratic_train.jsonl) | SFT data (not the benchmark) |
+| [run_eval_qwen25.py](run_eval_qwen25.py) | ScienceQA on `socratic_qwen25_7b_model` |
+| [start.py](start.py) | `--eval` → Phi-3; `--qwen` → 4B; `--qwen25` → 7B |
+| [convert_v4_to_sft.py](convert_v4_to_sft.py) | v4 `turns` → `socratic_train_v4.jsonl` |
 
 ## What this is not (later paper work)
 

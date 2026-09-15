@@ -96,6 +96,15 @@ def _write_env_key(key: str, value: str) -> None:
     ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def apply_qwen25_wandb_env() -> str:
+    project = _env("WANDB_PROJECT_QWEN25") or "science_socratic_qwen25-7b_instruct"
+    os.environ["WANDB_PROJECT_QWEN25"] = project
+    os.environ["WANDB_PROJECT"] = project
+    os.environ.pop("WANDB_RUN_ID", None)
+    print(f"W&B project (Qwen2.5-7B): {project} (Phi-3 / Qwen3-4B projects are not used)")
+    return project
+
+
 def apply_qwen_wandb_env() -> str:
     """Child train/eval inherit WANDB_PROJECT; .env often still has socratic-phi3."""
     project = _env("WANDB_PROJECT_QWEN") or "science_socratic_qwen3-4b_instruct"
@@ -112,6 +121,10 @@ def ensure_secrets() -> None:
     os.environ.setdefault("WANDB_PROJECT", "socratic-phi3")
     if _need("WANDB_PROJECT_QWEN"):
         os.environ["WANDB_PROJECT_QWEN"] = "science_socratic_qwen3-4b_instruct"
+    if _need("WANDB_PROJECT_QWEN25"):
+        os.environ["WANDB_PROJECT_QWEN25"] = "science_socratic_qwen25-7b_instruct"
+    if _need("HF_QWEN25_REPO"):
+        os.environ["HF_QWEN25_REPO"] = "Susu11/Science_Socratic_Qwen2.5-7B_Instruct"
     if _need("HF_HUB_REPO"):
         os.environ["HF_HUB_REPO"] = "Susu11/socratic-phi3"
     if _need("HF_QWEN_REPO"):
@@ -394,9 +407,21 @@ def main() -> None:
         action="store_true",
         help="ScienceQA on socratic_qwen3_model (same as --eval --qwen)",
     )
+    parser.add_argument(
+        "--qwen25",
+        action="store_true",
+        help="Qwen2.5-7B-Instruct QLoRA (separate from Phi-3 and Qwen3-4B)",
+    )
     ns = parser.parse_args()
 
     os.chdir(ROOT)
+    if ns.gguf and ns.qwen25:
+        ensure_secrets()
+        bootstrap_runtime()
+        sync_deps()
+        print("Merging Qwen2.5-7B adapters, converting GGUF, uploading to HF_QWEN25_REPO...")
+        run(_python() + [str(ROOT / "export_gguf_qwen25.py")])
+        return
     if ns.gguf and (ns.qwen or ns.eval_qwen):
         ensure_secrets()
         bootstrap_runtime()
@@ -410,6 +435,17 @@ def main() -> None:
         sync_deps()
         print("Merging adapters, converting GGUF, uploading to Hub...")
         run(_python() + [str(ROOT / "export_gguf.py")])
+        return
+    if ns.eval and ns.qwen25:
+        ensure_secrets()
+        bootstrap_runtime()
+        sync_deps()
+        maybe_cuda_wheel()
+        if nvidia_smi() is None and not cuda_ok():
+            raise SystemExit("Need NVIDIA GPU for eval.")
+        print("ScienceQA eval only on Qwen2.5-7B adapters (no training)...")
+        apply_qwen25_wandb_env()
+        run(_python() + [str(ROOT / "run_eval_qwen25.py")])
         return
     if ns.eval_qwen or (ns.eval and ns.qwen):
         ensure_secrets()
@@ -436,6 +472,12 @@ def main() -> None:
     bootstrap_runtime()
     sync_deps()
 
+    if ns.qwen25:
+        v4_src = ROOT / "socratic_dataset_v4_annotated.jsonl"
+        if v4_src.is_file():
+            print("Converting v4 turns JSONL to SFT messages...")
+            run(_python() + [str(ROOT / "convert_v4_to_sft.py")])
+
     print("Uploading JSONL via Hugging Face Python API (no hf CLI)...")
     run(_python() + [str(ROOT / "upload_dataset.py")])
 
@@ -446,6 +488,37 @@ def main() -> None:
             file=sys.stderr,
         )
         raise SystemExit(1)
+
+    if ns.qwen25:
+        v4_sft = ROOT / "socratic_train_v4.jsonl"
+        if not v4_sft.is_file():
+            raise SystemExit(
+                f"Missing {v4_sft}. Copy socratic_dataset_v4_annotated.jsonl here and retry."
+            )
+        qwen_repo = _env("HF_QWEN25_REPO") or "Susu11/Science_Socratic_Qwen2.5-7B_Instruct"
+        dest = ROOT / "socratic_qwen25_7b_model"
+        if ns.download_checkpoints:
+            print(f"Downloading Qwen2.5-7B adapters from {qwen_repo} ...")
+            run(
+                _python()
+                + [
+                    "-c",
+                    "from huggingface_hub import snapshot_download; "
+                    f"snapshot_download(repo_id={qwen_repo!r}, local_dir={str(dest)!r})",
+                ]
+            )
+        train = [str(ROOT / "train_qwen25.py"), "--push-to-hub", qwen_repo]
+        if ns.fresh:
+            train.append("--no-resume")
+        print("Starting Qwen2.5-7B-Instruct QLoRA + ScienceQA (W&B) + Hub push...")
+        print("Phi-3 and Qwen3-4B adapters/repos are left unchanged.")
+        apply_qwen25_wandb_env()
+        run(_python() + train)
+        print(
+            f"Done. 7B adapters: {dest} | "
+            f"W&B: {_env('WANDB_PROJECT_QWEN25') or 'science_socratic_qwen25-7b_instruct'} | Hub: {qwen_repo}"
+        )
+        return
 
     if ns.qwen:
         qwen_repo = _env("HF_QWEN_REPO") or "Susu11/Science_Socratic_Qwen3-4B_Instruct"

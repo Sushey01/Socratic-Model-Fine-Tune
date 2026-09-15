@@ -107,7 +107,9 @@ If acc went **up** but SRI went **down**, the model might be turning into an ans
 | Train loss = exam score | No. Loss is homework. ScienceQA is the quiz. |
 | Token accuracy = ScienceQA acc | No. 98% tokens vs 66% letters are different tests. |
 | GGUF quality = extra accuracy | No. GGUF is compression/export. You should get similar behaviour if convert worked. |
-| One W&B project = one model | You now have Phi-3 vs Qwen **projects** so charts do not mix. |
+| One W&B project = one model | You now have Phi-3 vs Qwen3-4B vs Qwen2.5-7B **projects** so charts do not mix. |
+| Base GGUF = ready to LoRA-train | No. Train Hugging Face weights with QLoRA, then export a **new** GGUF. |
+| LoRA vs QLoRA for 7B | On a college GPU use **QLoRA** (4-bit base + LoRA adapters). fp16 LoRA on 7B usually runs out of VRAM. |
 
 ## Tiny example of the two ScienceQA modes
 
@@ -128,7 +130,8 @@ Fine-tune JSONL teaches the second style. ScienceQA checks both styles on questi
 | Terminal `[train] step=... loss=...` | Homework fit, every few steps |
 | Terminal `ScienceQA epoch=... acc=... sri=...` | Quiz after each epoch |
 | W&B `socratic-phi3` | Phi-3 graphs |
-| W&B `science_socratic_qwen3-4b_instruct` | Qwen graphs (after the W&B split) |
+| W&B `science_socratic_qwen3-4b_instruct` | Qwen3-4B graphs |
+| W&B `science_socratic_qwen25-7b_instruct` | Qwen2.5-7B graphs |
 | Hugging Face adapters | The LoRA files the GPU learned |
 | Hugging Face `gguf/` | Optional later export for apps |
 

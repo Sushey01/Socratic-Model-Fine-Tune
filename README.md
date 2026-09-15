@@ -31,9 +31,11 @@ WANDB_API_KEY=...
 HF_TOKEN=hf_...
 HF_HUB_REPO=Susu11/socratic-phi3
 HF_QWEN_REPO=Susu11/Science_Socratic_Qwen3-4B_Instruct
+HF_QWEN25_REPO=Susu11/Science_Socratic_Qwen2.5-7B_Instruct
 HF_DATASET_REPO=Susu11/socraticfinetune
 WANDB_PROJECT=socratic-phi3
 WANDB_PROJECT_QWEN=science_socratic_qwen3-4b_instruct
+WANDB_PROJECT_QWEN25=science_socratic_qwen25-7b_instruct
 ```
 
 Do not put a raw token on its own line. Do not `source .env` in Git Bash.
@@ -59,8 +61,9 @@ python start.py --eval
 python start.py --gguf
 python start.py --qwen          # Qwen3-4B-Instruct QLoRA (does not overwrite Phi-3)
 python start.py --eval --qwen   # ScienceQA on socratic_qwen3_model
-python start.py --gguf --qwen   # Qwen GGUF → HF_QWEN_REPO (not Phi-3)
-```
+python start.py --qwen25        # Qwen2.5-7B QLoRA on v4 data (does not overwrite 4B/Phi-3)
+python start.py --eval --qwen25
+python start.py --gguf --qwen25```
 
 ## Hugging Face
 
@@ -71,10 +74,12 @@ Keep a local `.env` (gitignored). Do **not** commit it. On the college PC, creat
 | `HF_DATASET_REPO` | `Susu11/socraticfinetune` | JSONL via Python Hub API |
 | `HF_HUB_REPO` | `Susu11/socratic-phi3` | **Final** Phi-3 LoRA adapters after train (not step checkpoints) |
 | `HF_QWEN_REPO` | `Susu11/Science_Socratic_Qwen3-4B_Instruct` | **Final** Qwen3 Instruct LoRA adapters (`python start.py --qwen`) |
+| `HF_QWEN25_REPO` | `Susu11/Science_Socratic_Qwen2.5-7B_Instruct` | **Final** Qwen2.5-7B QLoRA adapters (`python start.py --qwen25`) |
 | `HF_TOKEN` | `hf_...` **without a `#` in front** | Write token; `start.py` reads `.env` |
 | `WANDB_API_KEY` | from wandb.ai | Logs ScienceQA after every epoch |
 | `WANDB_PROJECT` | `socratic-phi3` | W&B project for Phi-3 train/eval |
-| `WANDB_PROJECT_QWEN` | `science_socratic_qwen3-4b_instruct` | W&B project for Qwen (`--qwen` / `--eval --qwen`) |
+| `WANDB_PROJECT_QWEN` | `science_socratic_qwen3-4b_instruct` | W&B project for Qwen3-4B |
+| `WANDB_PROJECT_QWEN25` | `science_socratic_qwen25-7b_instruct` | W&B project for Qwen2.5-7B |
 
 `HF_TOKEN=...` must be an active line. A leading `#` means “comment” and the script cannot see it.
 
@@ -126,6 +131,7 @@ Merge needs a lot of RAM. `--eval` prefers KV cache (`use_cache=True`) and falls
 | Dataset JSONL | `HF_DATASET_REPO` | `Susu11/socraticfinetune` |
 | Phi-3 PEFT + GGUF | `HF_HUB_REPO` | `Susu11/socratic-phi3` |
 | Qwen3 Instruct PEFT + GGUF | `HF_QWEN_REPO` | `Susu11/Science_Socratic_Qwen3-4B_Instruct` |
+| Qwen2.5-7B PEFT + GGUF | `HF_QWEN25_REPO` | `Susu11/Science_Socratic_Qwen2.5-7B_Instruct` |
 
 Add `HF_QWEN_REPO=Susu11/Science_Socratic_Qwen3-4B_Instruct` to `.env` (created private on first push). Instruct-2507 is **non-thinking**. Same JSONL and ScienceQA slice as Phi-3.
 
@@ -140,6 +146,29 @@ uv run python infer_qwen.py --hub   # load adapters from HF_QWEN_REPO
 Code: [train_qwen.py](train_qwen.py) (professional Hub card on push), [run_eval_qwen.py](run_eval_qwen.py), [export_gguf_qwen.py](export_gguf_qwen.py), [infer_qwen.py](infer_qwen.py). Needs `transformers>=4.51`. Merge uses `merged_model_qwen/` so Phi-3 `merged_model/` is untouched.
 
 **Deploy:** PEFT on GPU via `infer_qwen.py` or the snippet on the Hub card; local/edge via the Qwen GGUF in llama.cpp or Ollama after `--gguf --qwen`.
+
+## Qwen2.5-7B-Instruct (QLoRA, separate from 4B)
+
+Use **QLoRA** (4-bit NF4 + LoRA adapters). fp16 LoRA on 7B usually OOMs on a college GPU. You still upload **LoRA adapters**; QLoRA is how the 7B base is loaded.
+
+A **base GGUF** of Qwen2.5-7B is only for running the *untuned* model in llama.cpp. This pipeline trains Hugging Face `Qwen/Qwen2.5-7B-Instruct`, then `python start.py --gguf --qwen25` merges and writes a **new** GGUF. Do not train on the old GGUF.
+
+Create an empty Hub model repo and W&B project, then in `.env`:
+
+```bash
+HF_QWEN25_REPO=Susu11/Science_Socratic_Qwen2.5-7B_Instruct
+WANDB_PROJECT_QWEN25=science_socratic_qwen25-7b_instruct
+```
+
+Copy `socratic_dataset_v4_annotated.jsonl` onto the college PC. `--qwen25` converts `turns` → `socratic_train_v4.jsonl` (~7948 chats) and trains with `batch_size=1`.
+
+```bash
+python start.py --qwen25
+python start.py --eval --qwen25
+python start.py --gguf --qwen25
+```
+
+Does **not** overwrite Phi-3 or Qwen3-4B. Code: [convert_v4_to_sft.py](convert_v4_to_sft.py), [train_qwen25.py](train_qwen25.py), [run_eval_qwen25.py](run_eval_qwen25.py), [export_gguf_qwen25.py](export_gguf_qwen25.py).
 
 ## ScienceQA benchmark (W&B)
 
