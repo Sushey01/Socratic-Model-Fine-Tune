@@ -129,8 +129,8 @@ def ensure_secrets() -> None:
         os.environ["HF_QWEN25_DATASET_REPO"] = "Susu11/qwen-socratic-tutor"
     if _need("HF_HUB_REPO"):
         os.environ["HF_HUB_REPO"] = "Susu11/socratic-phi3"
-    if _need("HF_QWEN_REPO"):
-        os.environ["HF_QWEN_REPO"] = "Susu11/Science_Socratic_Qwen3-4B_Instruct"
+    if _need("HF_QWEN_REPO") or _env("HF_QWEN_REPO") == "Susu11/Science_Socratic_Qwen3-4B_Instruct":
+        os.environ["HF_QWEN_REPO"] = "Susu11/v9socratic4b"
 
     if _env("WANDB_API_KEY"):
         print("Using WANDB_API_KEY from .env")
@@ -407,7 +407,7 @@ def main() -> None:
     parser.add_argument(
         "--eval-qwen",
         action="store_true",
-        help="ScienceQA on socratic_qwen3_model (same as --eval --qwen)",
+        help="ScienceQA on socratic_qwen3_v9_model (same as --eval --qwen)",
     )
     parser.add_argument(
         "--qwen25",
@@ -532,8 +532,10 @@ def main() -> None:
         raise SystemExit(1)
 
     if ns.qwen:
-        qwen_repo = _env("HF_QWEN_REPO") or "Susu11/Science_Socratic_Qwen3-4B_Instruct"
-        dest = ROOT / "socratic_qwen3_model"
+        qwen_repo = _env("HF_QWEN_REPO") or "Susu11/v9socratic4b"
+        if qwen_repo == "Susu11/Science_Socratic_Qwen3-4B_Instruct":
+            qwen_repo = "Susu11/v9socratic4b"
+        dest = ROOT / "socratic_qwen3_v9_model"
         if ns.download_checkpoints:
             print(f"Downloading Qwen adapters from {qwen_repo} ...")
             run(
@@ -553,6 +555,8 @@ def main() -> None:
             str(ROOT / "train_qwen.py"),
             "--push-to-hub",
             qwen_repo,
+            "--output-dir",
+            str(dest),
             "--data",
             str(v9_sft),
             "--epochs",

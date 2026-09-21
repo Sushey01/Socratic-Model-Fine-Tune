@@ -15,6 +15,7 @@ dist/
 gguf/
 socratic_finetuned_model/
 socratic_qwen3_model/
+socratic_qwen3_v9_model/
 socratic_qwen25_7b_model/
 socratic_mistral_lora_adapters/
 merged_model/

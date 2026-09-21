@@ -2,7 +2,7 @@
 """QLoRA SFT of Qwen3-4B-Instruct-2507 as a Grade 10 Socratic science tutor.
 
 Does not touch Phi-3 adapters (`socratic_finetuned_model` / HF_HUB_REPO).
-Output: ./socratic_qwen3_model  Hub: HF_QWEN_REPO (default Susu11/Science_Socratic_Qwen3-4B_Instruct).
+Output: ./socratic_qwen3_v9_model  Hub: HF_QWEN_REPO (default Susu11/v9socratic4b).
 
 This is the instruct / non-thinking checkpoint. Do not point --model at
 Qwen3-4B-Thinking-2507 (hidden CoT would spoil Socratic restraint).
@@ -39,8 +39,9 @@ from train import (
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DATA = ROOT / "dataset7b" / "socratic_v9_train.jsonl"
 DEFAULT_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
-DEFAULT_OUTPUT = ROOT / "socratic_qwen3_model"
-DEFAULT_HUB = "Susu11/Science_Socratic_Qwen3-4B_Instruct"
+DEFAULT_OUTPUT = ROOT / "socratic_qwen3_v9_model"
+DEFAULT_HUB = "Susu11/v9socratic4b"
+LEGACY_HUB = "Susu11/Science_Socratic_Qwen3-4B_Instruct"
 DEFAULT_WANDB_PROJECT = "science_socratic_qwen3-4b_instruct"
 LORA_TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
@@ -60,6 +61,19 @@ def apply_qwen_wandb_project() -> str:
     os.environ.pop("WANDB_RUN_ID", None)
     print(f"W&B project (Qwen): {project}", flush=True)
     return project
+
+
+def bind_v9_hub() -> str:
+    """v9 adapters go to Susu11/v9socratic4b, not the older 4B Hub repo."""
+    current = (os.environ.get("HF_QWEN_REPO") or "").strip()
+    if not current or current == LEGACY_HUB:
+        os.environ["HF_QWEN_REPO"] = DEFAULT_HUB
+        if current == LEGACY_HUB:
+            print(
+                f"HF_QWEN_REPO was {LEGACY_HUB}; v9 pushes to {DEFAULT_HUB}.",
+                flush=True,
+            )
+    return (os.environ.get("HF_QWEN_REPO") or DEFAULT_HUB).strip()
 
 
 def apply_sft_chat_template(tokenizer, messages: list) -> str:
@@ -97,7 +111,7 @@ This Hub repo is **Qwen-only**. Phi-3 adapters live in a separate model repo (`H
 | Repo root | Final PEFT adapters + tokenizer after SFT |
 | `gguf/` | Optional Q8_0/F16 GGUF after `python start.py --gguf --qwen` |
 
-Trainer `checkpoint-*` folders stay on the training PC (`socratic_qwen3_model/`) and are **not** uploaded.
+Trainer `checkpoint-*` folders stay on the training PC (`socratic_qwen3_v9_model/`) and are **not** uploaded.
 
 ## Base model
 
@@ -187,6 +201,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     load_runtime_env()
+    bind_v9_hub()
     args = parse_args()
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     os.environ["BASE_MODEL"] = args.model
@@ -199,6 +214,7 @@ def main() -> None:
         )
     if not args.push_to_hub:
         args.push_to_hub = os.environ.get("HF_QWEN_REPO", "") or DEFAULT_HUB
+    print(f"v9 Hub push: {args.push_to_hub} | adapters: {args.output_dir}", flush=True)
 
     if "Thinking" in args.model:
         raise SystemExit(
@@ -293,7 +309,9 @@ def main() -> None:
     except TypeError:
         trainer = SFTTrainer(tokenizer=tokenizer, **trainer_kwargs)
 
-    resume_from = resolve_checkpoint(args.output_dir, resume=not args.no_resume)
+    resume_from = resolve_checkpoint(
+        args.output_dir, resume=not args.no_resume, num_train_epochs=args.epochs
+    )
     print("Calling trainer.train() — watch [train] heartbeat lines and GPU use.", flush=True)
     trainer.train(resume_from_checkpoint=resume_from)
 
