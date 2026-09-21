@@ -21,6 +21,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from transformers.trainer_utils import get_last_checkpoint
 from trl import SFTTrainer
 
+from sft_dataset import apply_qwen_chat_template, prepare_qwen_sft_dataset
 from train import (
     DEFAULT_DATA,
     HeartbeatCallback,
@@ -62,11 +63,9 @@ def apply_qwen_wandb_project() -> str:
 
 def apply_sft_chat_template(tokenizer, messages: list) -> str:
     """Instruct-2507 is non-thinking; pass enable_thinking=False if the template still accepts it."""
-    kw = dict(tokenize=False, add_generation_prompt=False)
-    try:
-        return tokenizer.apply_chat_template(messages, enable_thinking=False, **kw)
-    except TypeError:
-        return tokenizer.apply_chat_template(messages, **kw)
+    return apply_qwen_chat_template(
+        tokenizer, messages, add_generation_prompt=False, enable_thinking=False
+    )
 
 
 def write_qwen_model_card(output_dir: Path, repo_id: str, base_model: str) -> None:
@@ -169,8 +168,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--model", default=os.environ.get("BASE_MODEL", DEFAULT_MODEL))
-    parser.add_argument("--epochs", type=float, default=3)
-    parser.add_argument("--max-length", type=int, default=512)
+    parser.add_argument("--epochs", type=float, default=1)
+    parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--grad-accum", type=int, default=2)
     parser.add_argument("--save-steps", type=int, default=100)
@@ -210,6 +209,10 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
+    dataset, sft_extra, trainer_extra = prepare_qwen_sft_dataset(
+        dataset, tokenizer, enable_thinking=False
+    )
 
     use_bnb = True
     compute = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
@@ -251,7 +254,8 @@ def main() -> None:
         bf16=use_bf16,
         max_grad_norm=0.3,
         max_steps=-1,
-        lr_scheduler_type="constant",
+        lr_scheduler_type="cosine",
+        warmup_ratio=0.03,
         report_to="wandb" if wandb_enabled() else "none",
         logging_first_step=True,
         max_length=args.max_length,
@@ -260,17 +264,10 @@ def main() -> None:
         save_steps=args.save_steps,
         save_total_limit=args.save_total_limit,
         save_safetensors=True,
-        dataset_text_field="text",
+        **sft_extra,
     )
 
-    def to_text(example):
-        messages = example["messages"]
-        if not isinstance(messages, list):
-            raise ValueError("Expected 'messages' to be a list")
-        return {"text": apply_sft_chat_template(tokenizer, messages)}
-
-    dataset = dataset.map(to_text, remove_columns=[c for c in dataset.column_names if c != "text"])
-    print("Dataset mapped. Connecting W&B, then building trainer.", flush=True)
+    print("Connecting W&B, then building trainer.", flush=True)
 
     if not init_wandb():
         training_arguments.report_to = ["none"]
@@ -281,6 +278,7 @@ def main() -> None:
         "peft_config": lora_config,
         "args": training_arguments,
         "callbacks": [HeartbeatCallback(), ScienceQAEpochCallback(tokenizer, args.data)],
+        **trainer_extra,
     }
     print("Building SFTTrainer...", flush=True)
     try:
