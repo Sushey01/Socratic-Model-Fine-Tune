@@ -117,7 +117,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--model", default=os.environ.get("BASE_MODEL", DEFAULT_MODEL))
-    parser.add_argument("--epochs", type=float, default=1)
+    parser.add_argument("--epochs", type=float, default=2)
     parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--grad-accum", type=int, default=4)
