@@ -23,11 +23,11 @@ from trl import SFTTrainer
 
 from sft_dataset import apply_qwen_chat_template, prepare_qwen_sft_dataset
 from train import (
-    DEFAULT_DATA,
     HeartbeatCallback,
     ScienceQAEpochCallback,
     init_wandb,
     load_jsonl,
+    load_runtime_env,
     make_sft_config,
     prompt_line,
     prompt_secret,
@@ -37,6 +37,7 @@ from train import (
 )
 
 ROOT = Path(__file__).resolve().parent
+DEFAULT_DATA = ROOT / "dataset7b" / "socratic_v9_train.jsonl"
 DEFAULT_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
 DEFAULT_OUTPUT = ROOT / "socratic_qwen3_model"
 DEFAULT_HUB = "Susu11/Science_Socratic_Qwen3-4B_Instruct"
@@ -146,6 +147,7 @@ Same ScienceQA 256-item slice as Phi-3: `python start.py --eval --qwen`. Compare
 
 
 def ensure_qwen_secrets() -> None:
+    load_runtime_env()
     prompt_secret(
         "WANDB_API_KEY",
         "Weights & Biases API key (wandb.ai/authorize, input hidden): ",
@@ -184,12 +186,17 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    load_runtime_env()
     args = parse_args()
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     os.environ["BASE_MODEL"] = args.model
     os.environ.setdefault("WANDB_RUN_NAME", "qwen3-4b-instruct-sft")
     apply_qwen_wandb_project()
     ensure_qwen_secrets()
+    if not args.data.is_file():
+        raise SystemExit(
+            f"Missing {args.data}. Need dataset7b/socratic_v9_train.jsonl (git pull on the GPU PC)."
+        )
     if not args.push_to_hub:
         args.push_to_hub = os.environ.get("HF_QWEN_REPO", "") or DEFAULT_HUB
 

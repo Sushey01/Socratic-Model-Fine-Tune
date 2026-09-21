@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """QLoRA SFT of Qwen2.5-7B-Instruct as a Grade 10 Socratic science tutor.
 
-Does not touch Phi-3 or Qwen3-4B adapters. Train on dataset7b/socratic_v7_train.jsonl
+Does not touch Phi-3 or Qwen3-4B adapters. Train on dataset7b/socratic_v9_train.jsonl
 (already messages; no convert_v4). Output: ./socratic_qwen25_7b_model
 Hub model: HF_QWEN25_REPO (Susu11/qwen2.5-7b-socratic-tutor). JSONL lives on
 HF_QWEN25_DATASET_REPO (Susu11/qwen-socratic-tutor), not the model repo.
@@ -27,6 +27,7 @@ from train import (
     ScienceQAEpochCallback,
     init_wandb,
     load_jsonl,
+    load_runtime_env,
     make_sft_config,
     prompt_line,
     prompt_secret,
@@ -37,7 +38,7 @@ from train import (
 from train_qwen import LORA_TARGETS, from_pretrained_qwen
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_DATA = ROOT / "dataset7b" / "socratic_v7_train.jsonl"
+DEFAULT_DATA = ROOT / "dataset7b" / "socratic_v9_train.jsonl"
 DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 DEFAULT_OUTPUT = ROOT / "socratic_qwen25_7b_model"
 DEFAULT_HUB = "Susu11/qwen2.5-7b-socratic-tutor"
@@ -83,7 +84,7 @@ This Hub repo is **Qwen2.5-7B adapters only**. Do not mix with `HF_HUB_REPO` (Ph
 
 ## Train
 
-4-bit NF4 + LoRA via `python start.py --qwen25`. Data: `dataset7b/socratic_v7_train.jsonl`. A **base GGUF** of Qwen2.5-7B is **not** used for SFT; convert a new GGUF after merge.
+4-bit NF4 + LoRA via `python start.py --qwen25`. Data: `dataset7b/socratic_v9_train.jsonl`. A **base GGUF** of Qwen2.5-7B is **not** used for SFT; convert a new GGUF after merge.
 
 ## Deploy
 
@@ -95,6 +96,7 @@ Eval: `python start.py --eval --qwen25` → W&B `WANDB_PROJECT_QWEN25`.
 
 
 def ensure_qwen25_secrets() -> None:
+    load_runtime_env()
     prompt_secret(
         "WANDB_API_KEY",
         "Weights & Biases API key (wandb.ai/authorize, input hidden): ",
@@ -133,6 +135,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    load_runtime_env()
     args = parse_args()
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     os.environ["BASE_MODEL"] = args.model
@@ -144,8 +147,8 @@ def main() -> None:
 
     if not args.data.is_file():
         raise SystemExit(
-            f"Missing {args.data}. Need dataset7b/socratic_v7_train.jsonl "
-            f"(Hub: {DEFAULT_DATASET_REPO})."
+            f"Missing {args.data}. Need dataset7b/socratic_v9_train.jsonl "
+            "(git pull on the GPU PC)."
         )
 
     if not torch.cuda.is_available():

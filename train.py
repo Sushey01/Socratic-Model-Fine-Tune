@@ -30,6 +30,51 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_DATA = ROOT / "socratic_train.jsonl"
 DEFAULT_OUTPUT = ROOT / "socratic_finetuned_model"
 DEFAULT_MODEL = "microsoft/Phi-3-mini-4k-instruct"
+ENV_PATH = ROOT / ".env"
+_ENV_LOADED = False
+
+
+def load_runtime_env() -> None:
+    """Load gitignored .env so train_qwen.py does not prompt when keys already exist."""
+    global _ENV_LOADED
+    if _ENV_LOADED:
+        return
+    _ENV_LOADED = True
+    try:
+        from dotenv import load_dotenv
+
+        if ENV_PATH.is_file():
+            load_dotenv(ENV_PATH, override=False)
+    except ImportError:
+        if ENV_PATH.is_file():
+            raw = ENV_PATH.read_text(encoding="utf-8-sig")
+            for line in raw.splitlines():
+                line = line.strip().lstrip("\ufeff")
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                if line.startswith("export "):
+                    line = line[7:].strip()
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip().strip("'").strip('"')
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    for name in ("WANDB_API_KEY", "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):
+        val = (os.environ.get(name) or "").strip().strip("'").strip('"')
+        if val:
+            os.environ[name] = val
+    token = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
+    if token:
+        os.environ["HF_TOKEN"] = token
+        os.environ["HUGGING_FACE_HUB_TOKEN"] = token
+    os.environ.setdefault("HF_QWEN_REPO", "Susu11/Science_Socratic_Qwen3-4B_Instruct")
+    os.environ.setdefault("HF_QWEN25_REPO", "Susu11/qwen2.5-7b-socratic-tutor")
+    os.environ.setdefault("WANDB_PROJECT_QWEN", "science_socratic_qwen3-4b_instruct")
+    os.environ.setdefault("WANDB_PROJECT_QWEN25", "science_socratic_qwen25-7b_instruct")
+    if (os.environ.get("WANDB_API_KEY") or "").strip():
+        print("Using WANDB_API_KEY from .env", flush=True)
+    if (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip():
+        print("Using HF_TOKEN from .env", flush=True)
 
 
 def load_base_config(model_id: str):
@@ -198,6 +243,7 @@ def prompt_line(env_name: str, prompt: str, default: str = "") -> str:
 
 def ensure_runtime_secrets() -> None:
     """Ask on the training PC if W&B or Hugging Face credentials are missing."""
+    load_runtime_env()
     prompt_secret(
         "WANDB_API_KEY",
         "Weights & Biases API key (wandb.ai/authorize, input hidden): ",
@@ -385,6 +431,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    load_runtime_env()
     args = parse_args()
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     ensure_runtime_secrets()

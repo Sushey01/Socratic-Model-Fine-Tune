@@ -22,7 +22,7 @@ bash start.sh
 
 `.env` is **gitignored** and is **not** on GitHub. `git pull` never restores it. Keep a copy in a password manager. Repo template (no secrets): [`.env.example`](.env.example). Do not replace `.env` with the example.
 
-If `.env` already has `WANDB_API_KEY` and `HF_TOKEN` (no `#` in front of those lines), **`start.py` will not ask you to paste keys**. You should see `Using WANDB_API_KEY from .env` and `Using HF_TOKEN from .env`. It only prompts when a key is missing or commented out.
+If `.env` already has `WANDB_API_KEY` and `HF_TOKEN` (no `#` in front of those lines), **`start.py`, `train_qwen.py`, and `train_qwen25.py` will not ask you to paste keys**. You should see `Using WANDB_API_KEY from .env` and `Using HF_TOKEN from .env`. It only prompts when a key is missing or commented out.
 
 Each line must be `NAME=value` (quotes optional):
 
@@ -60,9 +60,9 @@ python start.py --fresh
 python start.py --download-checkpoints
 python start.py --eval
 python start.py --gguf
-python start.py --qwen          # Qwen3-4B-Instruct QLoRA (does not overwrite Phi-3)
+python start.py --qwen          # Qwen3-4B-Instruct QLoRA on v9 (does not overwrite Phi-3)
 python start.py --eval --qwen   # ScienceQA on socratic_qwen3_model
-python start.py --qwen25        # Qwen2.5-7B QLoRA on v7 train (does not overwrite 4B/Phi-3)
+python start.py --qwen25        # Qwen2.5-7B QLoRA on v9 (does not overwrite 4B/Phi-3)
 python start.py --eval --qwen25
 python start.py --gguf --qwen25
 ```

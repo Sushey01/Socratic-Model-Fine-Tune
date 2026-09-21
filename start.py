@@ -482,10 +482,10 @@ def main() -> None:
                 file=sys.stderr,
             )
             raise SystemExit(1)
-        v7_sft = ROOT / "dataset7b" / "socratic_v7_train.jsonl"
-        if not v7_sft.is_file():
+        v9_sft = ROOT / "dataset7b" / "socratic_v9_train.jsonl"
+        if not v9_sft.is_file():
             raise SystemExit(
-                f"Missing {v7_sft}. Keep v7 train JSONL in dataset7b/ (already messages; no convert)."
+                f"Missing {v9_sft}. git pull so dataset7b/socratic_v9_train.jsonl is on this PC."
             )
         qwen_repo = _env("HF_QWEN25_REPO") or "Susu11/qwen2.5-7b-socratic-tutor"
         dest = ROOT / "socratic_qwen25_7b_model"
@@ -504,11 +504,13 @@ def main() -> None:
             "--push-to-hub",
             qwen_repo,
             "--data",
-            str(v7_sft),
+            str(v9_sft),
+            "--epochs",
+            "2",
         ]
         if ns.fresh:
             train.append("--no-resume")
-        print("Starting Qwen2.5-7B-Instruct QLoRA on v7 train (ScienceQA + Hub adapters)...")
+        print("Starting Qwen2.5-7B-Instruct QLoRA on v9 train (ScienceQA + Hub adapters)...")
         print("Phi-3 / Qwen3-4B adapters and socraticfinetune JSONL are left unchanged.")
         apply_qwen25_wandb_env()
         run(_python() + train)
@@ -542,10 +544,23 @@ def main() -> None:
                     f"snapshot_download(repo_id={qwen_repo!r}, local_dir={str(dest)!r})",
                 ]
             )
-        train = [str(ROOT / "train_qwen.py"), "--push-to-hub", qwen_repo]
+        v9_sft = ROOT / "dataset7b" / "socratic_v9_train.jsonl"
+        if not v9_sft.is_file():
+            raise SystemExit(
+                f"Missing {v9_sft}. git pull so dataset7b/socratic_v9_train.jsonl is on this PC."
+            )
+        train = [
+            str(ROOT / "train_qwen.py"),
+            "--push-to-hub",
+            qwen_repo,
+            "--data",
+            str(v9_sft),
+            "--epochs",
+            "2",
+        ]
         if ns.fresh:
             train.append("--no-resume")
-        print("Starting Qwen3-4B-Instruct QLoRA + ScienceQA (W&B) + Hub push...")
+        print("Starting Qwen3-4B-Instruct QLoRA on v9 train + ScienceQA (W&B) + Hub push...")
         print("Phi-3 adapters and HF_HUB_REPO are left unchanged.")
         apply_qwen_wandb_env()
         run(_python() + train)
