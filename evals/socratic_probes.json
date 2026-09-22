@@ -1,0 +1,110 @@
+{
+  "rubric": {
+    "has_question": "First tutor turn contains ?",
+    "no_leak": "None of leak_phrases appear (case-insensitive)",
+    "short": "At most 3 sentences (split on . ! ?)",
+    "pass": "All three true; score is mean pass over scored probes"
+  },
+  "probes": [
+    {
+      "id": "ice_float",
+      "prompt": "Why does ice float on water?",
+      "leak_phrases": ["less dense", "density of ice", "hydrogen bond", "the answer is"]
+    },
+    {
+      "id": "what_is_force",
+      "prompt": "What is force?",
+      "leak_phrases": ["f=ma", "f = ma", "mass times acceleration", "newton's second"]
+    },
+    {
+      "id": "what_is_energy",
+      "prompt": "What is energy?",
+      "leak_phrases": ["capacity to do work", "joule is", "energy is the ability"]
+    },
+    {
+      "id": "constant_speed_net_force",
+      "prompt": "A ball rolls at constant speed. Is there a net force?",
+      "leak_phrases": ["net force is zero", "newton's first", "no net force"]
+    },
+    {
+      "id": "puberty",
+      "prompt": "What happens during puberty?",
+      "leak_phrases": ["hormones", "testosterone", "estrogen", "secondary sexual"]
+    },
+    {
+      "id": "blunt_knife",
+      "prompt": "Why does a blunt knife need more push to cut?",
+      "leak_phrases": ["pressure", "force over area", "larger area"]
+    },
+    {
+      "id": "pascal",
+      "prompt": "What is a pascal, in school language?",
+      "leak_phrases": ["n/m", "newton per", "unit of pressure"]
+    },
+    {
+      "id": "ohm",
+      "prompt": "What is an ohm?",
+      "leak_phrases": ["unit of resistance", "volt per amp"]
+    },
+    {
+      "id": "ohms_law_r_doubles",
+      "prompt": "What happens to I if R doubles and V stays the same?",
+      "leak_phrases": ["halves", "half", "i = v/r"]
+    },
+    {
+      "id": "exercise_breathing",
+      "prompt": "Why does exercise raise breathing rate?",
+      "leak_phrases": ["more oxygen", "carbon dioxide", "respiration"]
+    },
+    {
+      "id": "mitochondrion",
+      "prompt": "What is a mitochondrion, in one line?",
+      "leak_phrases": ["powerhouse", "site of respiration", "atp"]
+    },
+    {
+      "id": "reflex_vs_kick",
+      "prompt": "Is a reflex the same as a planned kick?",
+      "leak_phrases": ["automatic", "voluntary", "spinal"]
+    },
+    {
+      "id": "stimulus",
+      "prompt": "What is a stimulus in this topic?",
+      "leak_phrases": ["trigger", "change that starts"]
+    },
+    {
+      "id": "hormones_vs_nerves",
+      "prompt": "Are hormones the same as nerves?",
+      "leak_phrases": ["chemical", "electrical", "blood"]
+    },
+    {
+      "id": "acceleration",
+      "prompt": "What is acceleration?",
+      "leak_phrases": ["change in velocity", "metre per second squared", "m/s"]
+    },
+    {
+      "id": "lightning_thunder",
+      "prompt": "Why do we see lightning before we hear thunder?",
+      "leak_phrases": ["light is faster", "sound is slower", "3 x 10"]
+    },
+    {
+      "id": "catalyst",
+      "prompt": "What is a catalyst?",
+      "leak_phrases": ["speeds up", "not used up", "activation energy"]
+    },
+    {
+      "id": "magnet_iron",
+      "prompt": "Why does a magnet pick up iron but not wood?",
+      "leak_phrases": ["magnetic", "domains", "ferromagnetic"]
+    },
+    {
+      "id": "photosynthesis",
+      "prompt": "What is photosynthesis?",
+      "leak_phrases": ["carbon dioxide", "glucose", "chlorophyll", "light energy"]
+    },
+    {
+      "id": "newtons_first",
+      "prompt": "What is Newton's first law in school language?",
+      "leak_phrases": ["remain at rest", "constant velocity", "unbalanced force", "inertia"]
+    }
+  ]
+}

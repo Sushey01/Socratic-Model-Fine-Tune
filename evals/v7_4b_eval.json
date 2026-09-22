@@ -1,0 +1,53 @@
+{
+  "id": "v7_4b",
+  "hub": "Susu11/v7_4b_qwen",
+  "local_adapters": "socratic_qwen3_v7_model",
+  "base_model": "Qwen/Qwen3-4B-Instruct-2507",
+  "train": {
+    "data": "dataset7b/socratic_v7_final_v3.jsonl",
+    "chats": 1429,
+    "epochs_requested": 2,
+    "approx_steps": 716,
+    "no_resume": true,
+    "method": "QLoRA"
+  },
+  "gguf": "https://huggingface.co/Susu11/v7_4b_qwen/blob/main/gguf/socratic-qwen3-q8_0.gguf",
+  "space": "https://huggingface.co/spaces/Susu11/socratic",
+  "wandb": {
+    "project": "science_socratic_qwen3-4b_instruct",
+    "run_name": "qwen3-4b-instruct-eval",
+    "run_id": "hmn5l53p",
+    "url": "https://wandb.ai/susmagar012-sunway-college-kathmandu/science_socratic_qwen3-4b_instruct/runs/hmn5l53p"
+  },
+  "scienceqa": {
+    "n": 256,
+    "seed": 42,
+    "slice_file": "scienceqa_n256_seed42.json",
+    "ngram_overlap": 0.0,
+    "acc": 0.68359,
+    "sri": 0.90625,
+    "logged_epoch_in_wandb": 3.0,
+    "logged_epoch_note": "run_eval_qwen.py hardcodes epoch=3.0; SFT was 2 epochs"
+  },
+  "socratic_probe_score": 0.5,
+  "socratic_probe_note": "1/2 scored probes (ice fail leak, force pass); 18 probes still need MSI generate via python eval_socratic_probes.py --adapter socratic_qwen3_v7_model",
+  "qualitative_probes": [
+    {
+      "prompt": "Why does ice float on water?",
+      "source": "infer_qwen.py local adapters",
+      "reply": "Here's a question for you: Water is unique among liquids because its solid form, ice, is less dense than its liquid form. What do you think happens to the volume of water molecules as they form a crystal lattice when freezing?",
+      "has_question": true,
+      "leaks_answer": true,
+      "leak_note": "States ice is less dense before asking about lattice volume"
+    },
+    {
+      "prompt": "What is force?",
+      "source": "infer_qwen.py --hub Susu11/v7_4b_qwen",
+      "reply": "Think about this for a moment: A soccer ball stays still until you kick it. Once kicked, it speeds up in the direction you pushed. What does that tell you is happening to the ball as a result of the kick?",
+      "has_question": true,
+      "leaks_answer": false,
+      "leak_note": "Example + question; does not define F=ma"
+    }
+  ],
+  "metric_caveat": "scienceqa_acc is MC exam skill; scienceqa_sri only blocks gold option text, not fact dumps inside a question."
+}

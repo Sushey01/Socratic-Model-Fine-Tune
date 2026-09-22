@@ -1,0 +1,50 @@
+{
+  "protocol": {
+    "scienceqa_n": 256,
+    "scienceqa_seed": 42,
+    "slice_file": "scienceqa_n256_seed42.json",
+    "system": "Socratic Grade 10 tutor; do not give the final answer; 1-3 sentences",
+    "decode": "greedy",
+    "commands": {
+      "v9_4b_scienceqa": "$env:ADAPTER_DIR='socratic_qwen3_v9_model'; $env:HF_QWEN_REPO='Susu11/v9socratic4b'; python start.py --eval --qwen",
+      "v7_4b_socratic_probes": "uv run python eval_socratic_probes.py --adapter socratic_qwen3_v7_model --model-id v7_4b",
+      "v9_4b_socratic_probes": "uv run python eval_socratic_probes.py --adapter socratic_qwen3_v9_model --model-id v9_4b --out evals/v9_4b_socratic_probes.json",
+      "v7_7b_scienceqa": "python start.py --eval --qwen25"
+    },
+    "note": "Compare fine-tunes only. Acc up + Socratic probes down means a better exam bot, not a better tutor."
+  },
+  "models": [
+    {
+      "id": "v7_4b",
+      "hub": "Susu11/v7_4b_qwen",
+      "status": "measured",
+      "scienceqa_acc": 0.68359,
+      "scienceqa_sri": 0.90625,
+      "socratic_probe_score": 0.5,
+      "socratic_probe_note": "partial: 2/20 probes scored from smoke tests",
+      "wandb_run": "hmn5l53p",
+      "eval_detail": "evals/v7_4b_eval.json"
+    },
+    {
+      "id": "v9_4b",
+      "hub": "Susu11/v9socratic4b",
+      "status": "needs_same_slice_rerun",
+      "scienceqa_acc": null,
+      "scienceqa_sri": null,
+      "socratic_probe_score": null,
+      "prior_wandb_acc_approx": 0.59,
+      "prior_note": "Do not treat 0.59 as this table until ADAPTER_DIR=socratic_qwen3_v9_model python start.py --eval --qwen on scienceqa_n256_seed42.json",
+      "wandb_run": null
+    },
+    {
+      "id": "v7_7b",
+      "hub": "Susu11/v7_qwen7b",
+      "status": "pending_train",
+      "scienceqa_acc": null,
+      "scienceqa_sri": null,
+      "socratic_probe_score": null,
+      "eval_command": "python start.py --eval --qwen25",
+      "wandb_run": null
+    }
+  ]
+}

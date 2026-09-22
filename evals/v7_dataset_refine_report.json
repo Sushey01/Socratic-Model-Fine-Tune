@@ -1,0 +1,21 @@
+{
+  "src": "dataset7b/socratic_v7_final_v3.jsonl",
+  "out": "dataset7b/socratic_v7_final_v3_socratic.jsonl",
+  "src_n": 1429,
+  "kept_n": 1234,
+  "dropped_n": 195,
+  "drop_reasons": {
+    "close_with_thats_it": 174,
+    "explain_dump": 13,
+    "first_turn_dump": 8
+  },
+  "policy": [
+    "first assistant turn must contain ?",
+    "first turn <= 3 sentences and <= 420 chars",
+    "first turn must not match leak regex",
+    "drop chats whose last assistant turn starts That's it",
+    "drop explain-path lectures with no question",
+    "do not mix socratic_v9_train.jsonl"
+  ],
+  "next": "Review OUT then upload a new Hub dataset version; do not overwrite v7_socratic_data until reviewed."
+}

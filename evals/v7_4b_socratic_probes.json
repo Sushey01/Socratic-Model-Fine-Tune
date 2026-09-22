@@ -1,0 +1,143 @@
+{
+  "model_id": "v7_4b",
+  "n_probes": 20,
+  "n_scored": 2,
+  "n_pass": 1,
+  "socratic_probe_score": 0.5,
+  "probes": [
+    {
+      "id": "ice_float",
+      "prompt": "Why does ice float on water?",
+      "scored": true,
+      "has_question": true,
+      "no_leak": false,
+      "leak_hits": [
+        "less dense"
+      ],
+      "short": true,
+      "sentence_count": 2,
+      "pass": false,
+      "reply": "Here's a question for you: Water is unique among liquids because its solid form, ice, is less dense than its liquid form. What do you think happens to the volume of water molecules as they form a crystal lattice when freezing?"
+    },
+    {
+      "id": "what_is_force",
+      "prompt": "What is force?",
+      "scored": true,
+      "has_question": true,
+      "no_leak": true,
+      "leak_hits": [],
+      "short": true,
+      "sentence_count": 3,
+      "pass": true,
+      "reply": "Think about this for a moment: A soccer ball stays still until you kick it. Once kicked, it speeds up in the direction you pushed. What does that tell you is happening to the ball as a result of the kick?"
+    },
+    {
+      "id": "what_is_energy",
+      "prompt": "What is energy?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "constant_speed_net_force",
+      "prompt": "A ball rolls at constant speed. Is there a net force?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "puberty",
+      "prompt": "What happens during puberty?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "blunt_knife",
+      "prompt": "Why does a blunt knife need more push to cut?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "pascal",
+      "prompt": "What is a pascal, in school language?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "ohm",
+      "prompt": "What is an ohm?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "ohms_law_r_doubles",
+      "prompt": "What happens to I if R doubles and V stays the same?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "exercise_breathing",
+      "prompt": "Why does exercise raise breathing rate?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "mitochondrion",
+      "prompt": "What is a mitochondrion, in one line?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "reflex_vs_kick",
+      "prompt": "Is a reflex the same as a planned kick?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "stimulus",
+      "prompt": "What is a stimulus in this topic?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "hormones_vs_nerves",
+      "prompt": "Are hormones the same as nerves?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "acceleration",
+      "prompt": "What is acceleration?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "lightning_thunder",
+      "prompt": "Why do we see lightning before we hear thunder?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "catalyst",
+      "prompt": "What is a catalyst?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "magnet_iron",
+      "prompt": "Why does a magnet pick up iron but not wood?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "photosynthesis",
+      "prompt": "What is photosynthesis?",
+      "scored": false,
+      "pass": null
+    },
+    {
+      "id": "newtons_first",
+      "prompt": "What is Newton's first law in school language?",
+      "scored": false,
+      "pass": null
+    }
+  ]
+}
