@@ -193,7 +193,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--grad-accum", type=int, default=2)
     parser.add_argument("--save-steps", type=int, default=100)
-    parser.add_argument("--save-total-limit", type=int, default=3)
+    parser.add_argument("--save-total-limit", type=int, default=10)
     parser.add_argument("--no-resume", action="store_true")
     parser.add_argument(
         "--push-to-hub",
