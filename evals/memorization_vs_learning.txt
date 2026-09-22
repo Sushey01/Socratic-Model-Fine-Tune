@@ -1,0 +1,95 @@
+MEMORIZATION vs LEARNING — v7 4B Socratic tutor
+================================================
+
+Symptom
+-------
+The deployed model often sounds like a tutor (short question, "Let's work through this")
+but is not tracking the student. In one Space chat, puberty jumped to plant tropism,
+digestion, force, momentum, particle size, then motion — with the same openers reused.
+
+This is memorization of high-frequency assistant templates, not Socratic reasoning
+conditioned on the last user turn.
+
+
+Evidence from the 2-epoch QLoRA run (~716 steps)
+------------------------------------------------
+Metric              Early (~step 30)     End (step 716)
+Loss                ~1.28                ~0.10–0.13
+Token accuracy      ~65%                 ~95–97%
+Entropy             ~1.27                ~0.09–0.15
+
+Loss fell below 0.5 by ~step 90 (still epoch 1). That is too fast for "learned to
+tutor." It matches predicting easy repeated tokens: system-adjacent assistant
+boilerplate ("Let's work through this:", "Let's think about this:").
+
+ScienceQA (same 256-item slice, seed 42) barely moved:
+  epoch 1 acc ~0.6719
+  epoch 2 acc ~0.6758   (final eval acc 0.6836, SRI 0.9062)
+
+Train loss kept falling in epoch 2 while held-out acc stayed flat. That is
+overfitting to the train JSONL, not better generalization.
+
+ScienceQA acc is an exam-letter score. SRI only checks that the MC gold text was
+not pasted. Neither measures "stayed on puberty." Ice-float still leaked
+"less dense" then asked a question.
+
+
+Masking (do not misdiagnose)
+----------------------------
+train_qwen.py already sets TRL assistant_only_loss=True when the installed TRL
+supports it. The MSI v9 run printed:
+
+  Using SFTConfig(assistant_only_loss=True); keeping raw 'messages'
+
+Confirm the same line at the top of the v7 / next train log. If it is there,
+the defect is NOT "loss on the full transcript." Assistant-only loss still
+trains every assistant token, including cloned openers.
+
+
+Checkpoints
+-----------
+save_total_limit was 3, so early epoch-1 folders were likely deleted.
+Default is now 10 so a retrain keeps more epoch-1 adapters.
+
+
+What we already did
+-------------------
+- Filtered train file: dataset7b/socratic_v7_final_v3_socratic.jsonl
+  (1234 / 1429 chats; dropped many "That's it —" closes and dumps)
+- No extra opener rewrite yet — let the next eval decide
+- Hub: Susu11/v7_4b_qwen  Space: huggingface.co/spaces/Susu11/socratic
+- Local keep: socratic_qwen3_v7_model  (old) vs socratic_qwen3_v7b_model (retrain)
+
+
+What to do now (order)
+----------------------
+1. On the MSI, git pull, then retrain on the FILTERED jsonl only:
+
+   uv run python train_qwen.py --data dataset7b/socratic_v7_final_v3_socratic.jsonl --epochs 2 --no-resume --output-dir socratic_qwen3_v7b_model --save-total-limit 10 --push-to-hub Susu11/v7_4b_qwen
+
+   Watch the header for assistant_only_loss=True.
+   --push-to-hub OVERWRITES Susu11/v7_4b_qwen (Space follows that id).
+   Omit --push-to-hub until eval if you want to keep the current public adapters.
+   Do not push to v9socratic4b.
+
+2. After train, compare OLD vs NEW on the same tests:
+   - 20 Socratic probes: python eval_socratic_probes.py --adapter socratic_qwen3_v7b_model
+   - Count how many replies start with "Let's work through this" / "Let's think about this"
+   - ScienceQA: ADAPTER_DIR=socratic_qwen3_v7b_model  python start.py --eval --qwen
+   Acc staying ~0.67 is OK if probes and opener diversity improve.
+
+3. If the new model still teleports topics: then (and only then) rewrite first-turn
+   leaks and kill cloned openers in the JSONL, and/or stop at an epoch-1 checkpoint
+   (lower token-acc, less memorization).
+
+4. Do not add RAG until a 5-turn chat stays on one topic.
+
+
+Pass / fail for "working properly"
+----------------------------------
+Pass: follow-up "we are in puberty" stays on puberty; student "i dont know"
+gets a simpler question on the SAME idea; "what is force?" switches topic
+cleanly; not the same three openers every turn.
+
+Fail: loss 0.1 + 97% token acc + same templates + topic jumps. That is a
+working autocomplete of the train set, not a working tutor.
