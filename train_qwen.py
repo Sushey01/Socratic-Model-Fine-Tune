@@ -2,7 +2,8 @@
 """QLoRA SFT of Qwen3-4B-Instruct-2507 as a Grade 10 Socratic science tutor.
 
 Does not touch Phi-3 adapters (`socratic_finetuned_model` / HF_HUB_REPO).
-Output: ./socratic_qwen3_v9_model  Hub: HF_QWEN_REPO (default Susu11/v9socratic4b).
+Output: ./socratic_qwen3_v7_model  Hub: HF_QWEN_REPO (default Susu11/v7_4b_qwen).
+Data: dataset7b/socratic_v7_final_v3.jsonl (Hub dataset Susu11/v7_socratic_data).
 
 This is the instruct / non-thinking checkpoint. Do not point --model at
 Qwen3-4B-Thinking-2507 (hidden CoT would spoil Socratic restraint).
@@ -37,11 +38,14 @@ from train import (
 )
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_DATA = ROOT / "dataset7b" / "socratic_v9_train.jsonl"
+DEFAULT_DATA = ROOT / "dataset7b" / "socratic_v7_final_v3.jsonl"
 DEFAULT_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
-DEFAULT_OUTPUT = ROOT / "socratic_qwen3_v9_model"
-DEFAULT_HUB = "Susu11/v9socratic4b"
-LEGACY_HUB = "Susu11/Science_Socratic_Qwen3-4B_Instruct"
+DEFAULT_OUTPUT = ROOT / "socratic_qwen3_v7_model"
+DEFAULT_HUB = "Susu11/v7_4b_qwen"
+LEGACY_HUBS = (
+    "Susu11/Science_Socratic_Qwen3-4B_Instruct",
+    "Susu11/v9socratic4b",
+)
 DEFAULT_WANDB_PROJECT = "science_socratic_qwen3-4b_instruct"
 LORA_TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 
@@ -64,13 +68,13 @@ def apply_qwen_wandb_project() -> str:
 
 
 def bind_v9_hub() -> str:
-    """v9 adapters go to Susu11/v9socratic4b, not the older 4B Hub repo."""
+    """v7_final_v3 run pushes to Susu11/v7_4b_qwen; leave v9 Hub as a baseline."""
     current = (os.environ.get("HF_QWEN_REPO") or "").strip()
-    if not current or current == LEGACY_HUB:
+    if not current or current in LEGACY_HUBS:
         os.environ["HF_QWEN_REPO"] = DEFAULT_HUB
-        if current == LEGACY_HUB:
+        if current in LEGACY_HUBS:
             print(
-                f"HF_QWEN_REPO was {LEGACY_HUB}; v9 pushes to {DEFAULT_HUB}.",
+                f"HF_QWEN_REPO was {current}; this run pushes to {DEFAULT_HUB}.",
                 flush=True,
             )
     return (os.environ.get("HF_QWEN_REPO") or DEFAULT_HUB).strip()
@@ -210,11 +214,11 @@ def main() -> None:
     ensure_qwen_secrets()
     if not args.data.is_file():
         raise SystemExit(
-            f"Missing {args.data}. Need dataset7b/socratic_v9_train.jsonl (git pull on the GPU PC)."
+            f"Missing {args.data}. Need dataset7b/socratic_v7_final_v3.jsonl (git pull on the GPU PC)."
         )
     if not args.push_to_hub:
         args.push_to_hub = os.environ.get("HF_QWEN_REPO", "") or DEFAULT_HUB
-    print(f"v9 Hub push: {args.push_to_hub} | adapters: {args.output_dir}", flush=True)
+    print(f"v7 Hub push: {args.push_to_hub} | adapters: {args.output_dir} | data: {args.data}", flush=True)
 
     if "Thinking" in args.model:
         raise SystemExit(

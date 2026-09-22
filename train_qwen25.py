@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """QLoRA SFT of Qwen2.5-7B-Instruct as a Grade 10 Socratic science tutor.
 
-Does not touch Phi-3 or Qwen3-4B adapters. Train on dataset7b/socratic_v9_train.jsonl
-(already messages; no convert_v4). Output: ./socratic_qwen25_7b_model
-Hub model: HF_QWEN25_REPO (Susu11/qwen2.5-7b-socratic-tutor). JSONL lives on
-HF_QWEN25_DATASET_REPO (Susu11/qwen-socratic-tutor), not the model repo.
+Does not touch Phi-3 or Qwen3-4B adapters. Train on dataset7b/socratic_v7_final_v3.jsonl
+(already messages; no convert_v4). Output: ./socratic_qwen25_v7_model
+Hub model: HF_QWEN25_REPO (Susu11/v7_qwen7b). JSONL lives on
+HF_V7_DATASET_REPO (Susu11/v7_socratic_data), not the model repo.
 
 College GPU: QLoRA only (4-bit NF4 + LoRA). Do not use the base GGUF for this SFT.
 """
@@ -38,11 +38,11 @@ from train import (
 from train_qwen import LORA_TARGETS, from_pretrained_qwen
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_DATA = ROOT / "dataset7b" / "socratic_v9_train.jsonl"
+DEFAULT_DATA = ROOT / "dataset7b" / "socratic_v7_final_v3.jsonl"
 DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
-DEFAULT_OUTPUT = ROOT / "socratic_qwen25_7b_model"
-DEFAULT_HUB = "Susu11/qwen2.5-7b-socratic-tutor"
-DEFAULT_DATASET_REPO = "Susu11/qwen-socratic-tutor"
+DEFAULT_OUTPUT = ROOT / "socratic_qwen25_v7_model"
+DEFAULT_HUB = "Susu11/v7_qwen7b"
+DEFAULT_DATASET_REPO = "Susu11/v7_socratic_data"
 DEFAULT_WANDB_PROJECT = "science_socratic_qwen25-7b_instruct"
 
 
@@ -84,7 +84,7 @@ This Hub repo is **Qwen2.5-7B adapters only**. Do not mix with `HF_HUB_REPO` (Ph
 
 ## Train
 
-4-bit NF4 + LoRA via `python start.py --qwen25`. Data: `dataset7b/socratic_v9_train.jsonl`. A **base GGUF** of Qwen2.5-7B is **not** used for SFT; convert a new GGUF after merge.
+4-bit NF4 + LoRA via `python start.py --qwen25`. Data: `dataset7b/socratic_v7_final_v3.jsonl`. A **base GGUF** of Qwen2.5-7B is **not** used for SFT; convert a new GGUF after merge.
 
 ## Deploy
 
@@ -136,6 +136,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     load_runtime_env()
+    cur = (os.environ.get("HF_QWEN25_REPO") or "").strip()
+    if not cur or cur == "Susu11/qwen2.5-7b-socratic-tutor":
+        os.environ["HF_QWEN25_REPO"] = DEFAULT_HUB
+        if cur == "Susu11/qwen2.5-7b-socratic-tutor":
+            print(f"HF_QWEN25_REPO was {cur}; this run pushes to {DEFAULT_HUB}.", flush=True)
     args = parse_args()
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     os.environ["BASE_MODEL"] = args.model
@@ -147,7 +152,7 @@ def main() -> None:
 
     if not args.data.is_file():
         raise SystemExit(
-            f"Missing {args.data}. Need dataset7b/socratic_v9_train.jsonl "
+            f"Missing {args.data}. Need dataset7b/socratic_v7_final_v3.jsonl "
             "(git pull on the GPU PC)."
         )
 

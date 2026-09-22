@@ -123,14 +123,19 @@ def ensure_secrets() -> None:
         os.environ["WANDB_PROJECT_QWEN"] = "science_socratic_qwen3-4b_instruct"
     if _need("WANDB_PROJECT_QWEN25"):
         os.environ["WANDB_PROJECT_QWEN25"] = "science_socratic_qwen25-7b_instruct"
-    if _need("HF_QWEN25_REPO"):
-        os.environ["HF_QWEN25_REPO"] = "Susu11/qwen2.5-7b-socratic-tutor"
+    if _need("HF_QWEN25_REPO") or _env("HF_QWEN25_REPO") == "Susu11/qwen2.5-7b-socratic-tutor":
+        os.environ["HF_QWEN25_REPO"] = "Susu11/v7_qwen7b"
     if _need("HF_QWEN25_DATASET_REPO"):
         os.environ["HF_QWEN25_DATASET_REPO"] = "Susu11/qwen-socratic-tutor"
+    if _need("HF_V7_DATASET_REPO"):
+        os.environ["HF_V7_DATASET_REPO"] = "Susu11/v7_socratic_data"
     if _need("HF_HUB_REPO"):
         os.environ["HF_HUB_REPO"] = "Susu11/socratic-phi3"
-    if _need("HF_QWEN_REPO") or _env("HF_QWEN_REPO") == "Susu11/Science_Socratic_Qwen3-4B_Instruct":
-        os.environ["HF_QWEN_REPO"] = "Susu11/v9socratic4b"
+    if _need("HF_QWEN_REPO") or _env("HF_QWEN_REPO") in {
+        "Susu11/Science_Socratic_Qwen3-4B_Instruct",
+        "Susu11/v9socratic4b",
+    }:
+        os.environ["HF_QWEN_REPO"] = "Susu11/v7_4b_qwen"
 
     if _env("WANDB_API_KEY"):
         print("Using WANDB_API_KEY from .env")
@@ -482,13 +487,15 @@ def main() -> None:
                 file=sys.stderr,
             )
             raise SystemExit(1)
-        v9_sft = ROOT / "dataset7b" / "socratic_v9_train.jsonl"
-        if not v9_sft.is_file():
+        v3_sft = ROOT / "dataset7b" / "socratic_v7_final_v3.jsonl"
+        if not v3_sft.is_file():
             raise SystemExit(
-                f"Missing {v9_sft}. git pull so dataset7b/socratic_v9_train.jsonl is on this PC."
+                f"Missing {v3_sft}. git pull so dataset7b/socratic_v7_final_v3.jsonl is on this PC."
             )
-        qwen_repo = _env("HF_QWEN25_REPO") or "Susu11/qwen2.5-7b-socratic-tutor"
-        dest = ROOT / "socratic_qwen25_7b_model"
+        qwen_repo = _env("HF_QWEN25_REPO") or "Susu11/v7_qwen7b"
+        if qwen_repo == "Susu11/qwen2.5-7b-socratic-tutor":
+            qwen_repo = "Susu11/v7_qwen7b"
+        dest = ROOT / "socratic_qwen25_v7_model"
         if ns.download_checkpoints:
             print(f"Downloading Qwen2.5-7B adapters from {qwen_repo} ...")
             run(
@@ -503,14 +510,16 @@ def main() -> None:
             str(ROOT / "train_qwen25.py"),
             "--push-to-hub",
             qwen_repo,
+            "--output-dir",
+            str(dest),
             "--data",
-            str(v9_sft),
+            str(v3_sft),
             "--epochs",
             "2",
         ]
         if ns.fresh:
             train.append("--no-resume")
-        print("Starting Qwen2.5-7B-Instruct QLoRA on v9 train (ScienceQA + Hub adapters)...")
+        print("Starting Qwen2.5-7B-Instruct QLoRA on v7_final_v3 (ScienceQA + Hub adapters)...")
         print("Phi-3 / Qwen3-4B adapters and socraticfinetune JSONL are left unchanged.")
         apply_qwen25_wandb_env()
         run(_python() + train)
@@ -532,10 +541,13 @@ def main() -> None:
         raise SystemExit(1)
 
     if ns.qwen:
-        qwen_repo = _env("HF_QWEN_REPO") or "Susu11/v9socratic4b"
-        if qwen_repo == "Susu11/Science_Socratic_Qwen3-4B_Instruct":
-            qwen_repo = "Susu11/v9socratic4b"
-        dest = ROOT / "socratic_qwen3_v9_model"
+        qwen_repo = _env("HF_QWEN_REPO") or "Susu11/v7_4b_qwen"
+        if qwen_repo in {
+            "Susu11/Science_Socratic_Qwen3-4B_Instruct",
+            "Susu11/v9socratic4b",
+        }:
+            qwen_repo = "Susu11/v7_4b_qwen"
+        dest = ROOT / "socratic_qwen3_v7_model"
         if ns.download_checkpoints:
             print(f"Downloading Qwen adapters from {qwen_repo} ...")
             run(
@@ -546,10 +558,10 @@ def main() -> None:
                     f"snapshot_download(repo_id={qwen_repo!r}, local_dir={str(dest)!r})",
                 ]
             )
-        v9_sft = ROOT / "dataset7b" / "socratic_v9_train.jsonl"
-        if not v9_sft.is_file():
+        v3_sft = ROOT / "dataset7b" / "socratic_v7_final_v3.jsonl"
+        if not v3_sft.is_file():
             raise SystemExit(
-                f"Missing {v9_sft}. git pull so dataset7b/socratic_v9_train.jsonl is on this PC."
+                f"Missing {v3_sft}. git pull so dataset7b/socratic_v7_final_v3.jsonl is on this PC."
             )
         train = [
             str(ROOT / "train_qwen.py"),
@@ -558,13 +570,13 @@ def main() -> None:
             "--output-dir",
             str(dest),
             "--data",
-            str(v9_sft),
+            str(v3_sft),
             "--epochs",
             "2",
         ]
         if ns.fresh:
             train.append("--no-resume")
-        print("Starting Qwen3-4B-Instruct QLoRA on v9 train + ScienceQA (W&B) + Hub push...")
+        print("Starting Qwen3-4B-Instruct QLoRA on v7_final_v3 + ScienceQA (W&B) + Hub push...")
         print("Phi-3 adapters and HF_HUB_REPO are left unchanged.")
         apply_qwen_wandb_env()
         run(_python() + train)

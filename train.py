@@ -67,8 +67,8 @@ def load_runtime_env() -> None:
     if token:
         os.environ["HF_TOKEN"] = token
         os.environ["HUGGING_FACE_HUB_TOKEN"] = token
-    os.environ.setdefault("HF_QWEN_REPO", "Susu11/v9socratic4b")
-    os.environ.setdefault("HF_QWEN25_REPO", "Susu11/qwen2.5-7b-socratic-tutor")
+    os.environ.setdefault("HF_QWEN_REPO", "Susu11/v7_4b_qwen")
+    os.environ.setdefault("HF_QWEN25_REPO", "Susu11/v7_qwen7b")
     os.environ.setdefault("WANDB_PROJECT_QWEN", "science_socratic_qwen3-4b_instruct")
     os.environ.setdefault("WANDB_PROJECT_QWEN25", "science_socratic_qwen25-7b_instruct")
     if (os.environ.get("WANDB_API_KEY") or "").strip():

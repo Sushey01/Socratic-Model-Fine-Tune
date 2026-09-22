@@ -30,10 +30,11 @@ Each line must be `NAME=value` (quotes optional):
 WANDB_API_KEY=...
 HF_TOKEN=hf_...
 HF_HUB_REPO=Susu11/socratic-phi3
-HF_QWEN_REPO=Susu11/v9socratic4b
-HF_QWEN25_REPO=Susu11/qwen2.5-7b-socratic-tutor
+HF_QWEN_REPO=Susu11/v7_4b_qwen
+HF_QWEN25_REPO=Susu11/v7_qwen7b
 HF_DATASET_REPO=Susu11/socraticfinetune
 HF_QWEN25_DATASET_REPO=Susu11/qwen-socratic-tutor
+HF_V7_DATASET_REPO=Susu11/v7_socratic_data
 WANDB_PROJECT=socratic-phi3
 WANDB_PROJECT_QWEN=science_socratic_qwen3-4b_instruct
 WANDB_PROJECT_QWEN25=science_socratic_qwen25-7b_instruct
@@ -60,9 +61,9 @@ python start.py --fresh
 python start.py --download-checkpoints
 python start.py --eval
 python start.py --gguf
-python start.py --qwen          # Qwen3-4B-Instruct QLoRA on v9 (does not overwrite Phi-3)
-python start.py --eval --qwen   # ScienceQA on socratic_qwen3_v9_model
-python start.py --qwen25        # Qwen2.5-7B QLoRA on v9 (does not overwrite 4B/Phi-3)
+python start.py --qwen          # Qwen3-4B-Instruct QLoRA on v7_final_v3 → v7_4b_qwen
+python start.py --eval --qwen   # ScienceQA on socratic_qwen3_v7_model
+python start.py --qwen25        # Qwen2.5-7B QLoRA on v7_final_v3 → v7_qwen7b
 python start.py --eval --qwen25
 python start.py --gguf --qwen25
 ```
@@ -75,9 +76,10 @@ Keep a local `.env` (gitignored). Do **not** commit it. On the college PC, creat
 | --- | --- | --- |
 | `HF_DATASET_REPO` | `Susu11/socraticfinetune` | JSONL via Python Hub API |
 | `HF_HUB_REPO` | `Susu11/socratic-phi3` | **Final** Phi-3 LoRA adapters after train (not step checkpoints) |
-| `HF_QWEN_REPO` | `Susu11/v9socratic4b` | **Final** Qwen3 Instruct LoRA adapters for **v9** (`python start.py --qwen`) |
-| `HF_QWEN25_REPO` | `Susu11/qwen2.5-7b-socratic-tutor` | **Final** Qwen2.5-7B QLoRA adapters (`python start.py --qwen25`) |
-| `HF_QWEN25_DATASET_REPO` | `Susu11/qwen-socratic-tutor` | v7 JSONL (`python upload_dataset7b.py`) |
+| `HF_QWEN_REPO` | `Susu11/v7_4b_qwen` | Qwen3-4B QLoRA adapters (`python start.py --qwen`; does not overwrite v9) |
+| `HF_QWEN25_REPO` | `Susu11/v7_qwen7b` | Qwen2.5-7B QLoRA adapters (`python start.py --qwen25`; does not overwrite v9) |
+| `HF_V7_DATASET_REPO` | `Susu11/v7_socratic_data` | `socratic_v7_final_v3.jsonl` (`python upload_v7_socratic_data.py`) |
+| `HF_QWEN25_DATASET_REPO` | `Susu11/qwen-socratic-tutor` | older 7B JSONL (`python upload_dataset7b.py`) |
 | `HF_TOKEN` | `hf_...` **without a `#` in front** | Write token; `start.py` reads `.env` |
 | `WANDB_API_KEY` | from wandb.ai | Logs ScienceQA after every epoch |
 | `WANDB_PROJECT` | `socratic-phi3` | W&B project for Phi-3 train/eval |
@@ -127,20 +129,21 @@ Merge needs a lot of RAM. `--eval` prefers KV cache (`use_cache=True`) and falls
 
 ## Qwen3-4B-Instruct (separate Hub repo + deploy)
 
-**Yes — Qwen must use a different Hugging Face model repo.** Phi-3 stays at `HF_HUB_REPO` (`Susu11/socratic-phi3`). v9 Qwen3-4B adapters go to `HF_QWEN_REPO` (`Susu11/v9socratic4b`). The older `Susu11/Science_Socratic_Qwen3-4B_Instruct` repo is left unchanged. The same `HF_TOKEN` can write to both; the **repo ids must not be mixed**.
+**Yes — Qwen must use a different Hugging Face model repo.** Phi-3 stays at `HF_HUB_REPO` (`Susu11/socratic-phi3`). v7 Qwen3-4B adapters go to `HF_QWEN_REPO` (`Susu11/v7_4b_qwen`). v9 hubs (`Susu11/v9socratic4b`, `Susu11/qwen2.5-7b-socratic-tutor`) are left unchanged. The same `HF_TOKEN` can write to all; the **repo ids must not be mixed**.
 
 | Artifact | Env | Default Hub |
 | --- | --- | --- |
-| Dataset JSONL | `HF_DATASET_REPO` | `Susu11/socraticfinetune` |
+| Dataset JSONL (Phi-3) | `HF_DATASET_REPO` | `Susu11/socraticfinetune` |
+| v7 Socratic JSONL | `HF_V7_DATASET_REPO` | `Susu11/v7_socratic_data` |
 | Phi-3 PEFT + GGUF | `HF_HUB_REPO` | `Susu11/socratic-phi3` |
-| Qwen3 Instruct PEFT + GGUF (v9) | `HF_QWEN_REPO` | `Susu11/v9socratic4b` |
-| Qwen2.5-7B PEFT + GGUF | `HF_QWEN25_REPO` | `Susu11/qwen2.5-7b-socratic-tutor` |
-| Qwen2.5-7B JSONL | `HF_QWEN25_DATASET_REPO` | `Susu11/qwen-socratic-tutor` |
+| Qwen3-4B PEFT + GGUF (v7) | `HF_QWEN_REPO` | `Susu11/v7_4b_qwen` |
+| Qwen2.5-7B PEFT + GGUF (v7) | `HF_QWEN25_REPO` | `Susu11/v7_qwen7b` |
+| Older 7B JSONL | `HF_QWEN25_DATASET_REPO` | `Susu11/qwen-socratic-tutor` |
 
-Add `HF_QWEN_REPO=Susu11/v9socratic4b` to `.env` (created private on first push). Instruct-2507 is **non-thinking**. Same JSONL and ScienceQA slice as Phi-3.
+Add `HF_QWEN_REPO=Susu11/v7_4b_qwen` and `HF_V7_DATASET_REPO=Susu11/v7_socratic_data` to `.env` (created private on first push). Instruct-2507 is **non-thinking**. Train on `dataset7b/socratic_v7_final_v3.jsonl`.
 
 ```bash
-python start.py --qwen              # QLoRA → socratic_qwen3_v9_model → HF_QWEN_REPO
+python start.py --qwen              # QLoRA → socratic_qwen3_v7_model → HF_QWEN_REPO
 python start.py --eval --qwen       # ScienceQA acc/sri
 python start.py --gguf --qwen       # merge → GGUF → HF_QWEN_REPO/gguf/
 uv run python infer_qwen.py         # GPU smoke test from local adapters
