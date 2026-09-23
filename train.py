@@ -130,20 +130,43 @@ def load_jsonl(path: Path) -> Dataset:
     return Dataset.from_list(rows)
 
 
-def resolve_checkpoint(output_dir: Path, resume: bool) -> str | None:
-    """Return the latest checkpoint path, or None.
+def resolve_checkpoint(
+    output_dir: Path,
+    resume: bool,
+    resume_from: str | None = None,
+) -> str | None:
+    """Return a checkpoint path for trainer.train(resume_from_checkpoint=...).
 
-    Do not skip resume when checkpoint epoch equals requested epochs: an
-    interrupted 2-epoch run often records epoch 2.0 at the last save.
-    Use --no-resume for a true fresh run.
+    Use --no-resume for a true fresh run. Do not skip a last save that records
+    epoch == requested epochs (interrupted 2-epoch runs often show epoch 2.0).
     """
-    if not resume or not output_dir.is_dir():
+    if not resume:
+        print("--no-resume: starting a new run.", flush=True)
         return None
-    last = get_last_checkpoint(str(output_dir))
+    if resume_from:
+        chosen = Path(resume_from)
+        if not chosen.is_dir():
+            raise SystemExit(f"--resume-from is not a directory: {chosen}")
+        print(f"Resuming from checkpoint: {chosen}", flush=True)
+        return str(chosen)
+    if not output_dir.is_dir():
+        print(f"No output dir {output_dir}; starting a new run.", flush=True)
+        return None
+    numbered: list[tuple[int, Path]] = []
+    for child in output_dir.iterdir():
+        if not child.is_dir() or not child.name.startswith("checkpoint-"):
+            continue
+        suffix = child.name.split("checkpoint-", 1)[-1]
+        if suffix.isdigit():
+            numbered.append((int(suffix), child))
+    if numbered:
+        last = str(max(numbered, key=lambda item: item[0])[1])
+    else:
+        last = get_last_checkpoint(str(output_dir))
     if not last:
-        print("No checkpoint found; starting a new run.")
+        print("No checkpoint found; starting a new run.", flush=True)
         return None
-    print(f"Resuming from checkpoint: {last}")
+    print(f"Resuming from checkpoint: {last}", flush=True)
     return last
 
 

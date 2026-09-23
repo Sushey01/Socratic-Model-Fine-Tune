@@ -196,6 +196,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-total-limit", type=int, default=10)
     parser.add_argument("--no-resume", action="store_true")
     parser.add_argument(
+        "--resume-from",
+        default="",
+        help="Checkpoint folder to load (example: socratic_qwen3_v7b_model/checkpoint-618)",
+    )
+    parser.add_argument(
         "--push-to-hub",
         default=os.environ.get("HF_QWEN_REPO", ""),
         help="HF repo id (or set HF_QWEN_REPO). Never use HF_HUB_REPO / Phi-3.",
@@ -313,7 +318,11 @@ def main() -> None:
     except TypeError:
         trainer = SFTTrainer(tokenizer=tokenizer, **trainer_kwargs)
 
-    resume_from = resolve_checkpoint(args.output_dir, resume=not args.no_resume)
+    resume_from = resolve_checkpoint(
+        args.output_dir,
+        resume=not args.no_resume,
+        resume_from=(args.resume_from or "").strip() or None,
+    )
     print("Calling trainer.train() — watch [train] heartbeat lines and GPU use.", flush=True)
     trainer.train(resume_from_checkpoint=resume_from)
 
