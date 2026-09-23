@@ -241,9 +241,7 @@ def main() -> None:
     except TypeError:
         trainer = SFTTrainer(tokenizer=tokenizer, **trainer_kwargs)
 
-    resume_from = resolve_checkpoint(
-        args.output_dir, resume=not args.no_resume, num_train_epochs=args.epochs
-    )
+    resume_from = resolve_checkpoint(args.output_dir, resume=not args.no_resume)
     print("Calling trainer.train() — QLoRA 7B, batch=1. Watch VRAM.", flush=True)
     trainer.train(resume_from_checkpoint=resume_from)
 

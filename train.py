@@ -130,31 +130,19 @@ def load_jsonl(path: Path) -> Dataset:
     return Dataset.from_list(rows)
 
 
-def resolve_checkpoint(
-    output_dir: Path, resume: bool, num_train_epochs: float | None = None
-) -> str | None:
+def resolve_checkpoint(output_dir: Path, resume: bool) -> str | None:
+    """Return the latest checkpoint path, or None.
+
+    Do not skip resume when checkpoint epoch equals requested epochs: an
+    interrupted 2-epoch run often records epoch 2.0 at the last save.
+    Use --no-resume for a true fresh run.
+    """
     if not resume or not output_dir.is_dir():
         return None
     last = get_last_checkpoint(str(output_dir))
     if not last:
         print("No checkpoint found; starting a new run.")
         return None
-    if num_train_epochs is not None:
-        state_path = Path(last) / "trainer_state.json"
-        if state_path.is_file():
-            try:
-                state = json.loads(state_path.read_text(encoding="utf-8"))
-                done_epoch = float(state.get("epoch") or 0)
-            except (OSError, ValueError, TypeError, json.JSONDecodeError):
-                done_epoch = 0.0
-            if done_epoch + 1e-6 >= float(num_train_epochs):
-                print(
-                    f"Checkpoint {last} is already at epoch {done_epoch:.2f}; "
-                    f"requested {num_train_epochs:g} epoch(s), so not resuming. "
-                    "Starting a new run on this data (use --no-resume to skip this check).",
-                    flush=True,
-                )
-                return None
     print(f"Resuming from checkpoint: {last}")
     return last
 
@@ -552,9 +540,7 @@ def main() -> None:
     except TypeError:
         trainer = SFTTrainer(tokenizer=tokenizer, **trainer_kwargs)
 
-    resume_from = resolve_checkpoint(
-        args.output_dir, resume=not args.no_resume, num_train_epochs=args.epochs
-    )
+    resume_from = resolve_checkpoint(args.output_dir, resume=not args.no_resume)
     print("Calling trainer.train() — watch [train] heartbeat lines and GPU use.", flush=True)
     trainer.train(resume_from_checkpoint=resume_from)
 

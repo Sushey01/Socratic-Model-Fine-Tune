@@ -313,9 +313,7 @@ def main() -> None:
     except TypeError:
         trainer = SFTTrainer(tokenizer=tokenizer, **trainer_kwargs)
 
-    resume_from = resolve_checkpoint(
-        args.output_dir, resume=not args.no_resume, num_train_epochs=args.epochs
-    )
+    resume_from = resolve_checkpoint(args.output_dir, resume=not args.no_resume)
     print("Calling trainer.train() — watch [train] heartbeat lines and GPU use.", flush=True)
     trainer.train(resume_from_checkpoint=resume_from)
 
