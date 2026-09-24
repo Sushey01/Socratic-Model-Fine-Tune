@@ -3,10 +3,12 @@ End-to-End Fine-Tuning Script for Socratic Science Tutor
 Optimized for Kaggle Dual NVIDIA T4 GPUs (2x 16GB VRAM)
 
 Adaptive parameter inspection to guarantee 100% compatibility across all TRL versions.
+Explicit max_memory mapping to prevent any CPU offloading ValueError.
 """
 
 import os
 import sys
+import gc
 import json
 import argparse
 import subprocess
@@ -220,6 +222,10 @@ def main():
     for i in range(gpu_count):
         print(f"   [{i}]: {torch.cuda.get_device_name(i)} ({torch.cuda.get_device_properties(i).total_memory / 1e9:.2f} GB)")
 
+    # Clean cache
+    gc.collect()
+    torch.cuda.empty_cache()
+
     setup_auth(args.hf_token, args.wandb_token)
 
     raw_dataset = load_socratic_dataset(args.dataset_name)
@@ -246,11 +252,16 @@ def main():
         bnb_4bit_use_double_quant=True,
     )
 
+    # Restrict memory strictly to GPUs without CPU offload
+    max_memory = {i: "14GiB" for i in range(gpu_count)}
+    print(f"Target GPU Memory Allocation: {max_memory}")
+
     print(f"🤖 Loading base model '{args.base_model}' across available GPUs...")
     model = AutoModelForCausalLM.from_pretrained(
         args.base_model,
         quantization_config=bnb_config,
         device_map="auto",
+        max_memory=max_memory,
         torch_dtype=torch.float16,
         trust_remote_code=True,
     )
@@ -269,7 +280,6 @@ def main():
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
 
-    # Adaptive parameter inspection for SFTConfig and SFTTrainer
     base_args = {
         "output_dir": args.output_dir,
         "num_train_epochs": args.num_train_epochs,
