@@ -4,6 +4,7 @@ Optimized for Kaggle Dual NVIDIA T4 GPUs (2x 16GB VRAM)
 
 Adaptive parameter inspection to guarantee 100% compatibility across all TRL versions.
 Explicit max_memory mapping to prevent any CPU offloading ValueError.
+Avoids passing duplicate peft_config to SFTTrainer.
 """
 
 import os
@@ -203,8 +204,8 @@ def main():
     parser.add_argument("--wandb_project", type=str, default="socratic-model-fine-tune")
     parser.add_argument("--wandb_run_name", type=str, default="kaggle-dual-t4-qwen-run")
     parser.add_argument("--num_train_epochs", type=int, default=3)
-    parser.add_argument("--per_device_train_batch_size", type=int, default=2)
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
+    parser.add_argument("--per_device_train_batch_size", type=int, default=1)
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--learning_rate", type=float, default=2e-4)
     parser.add_argument("--max_seq_length", type=int, default=2048)
     parser.add_argument("--lora_r", type=int, default=16)
@@ -252,8 +253,10 @@ def main():
         bnb_4bit_use_double_quant=True,
     )
 
-    # Restrict memory strictly to GPUs without CPU offload
-    max_memory = {i: "14GiB" for i in range(gpu_count)}
+    if gpu_count > 1:
+        max_memory = {0: "6GiB", 1: "13GiB"}
+    else:
+        max_memory = {0: "13GiB"}
     print(f"Target GPU Memory Allocation: {max_memory}")
 
     print(f"🤖 Loading base model '{args.base_model}' across available GPUs...")
@@ -278,6 +281,17 @@ def main():
         task_type="CAUSAL_LM",
     )
     model = get_peft_model(model, peft_config)
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    setattr(model, "is_parallelizable", True)
+    setattr(model, "model_parallel", True)
+    if hasattr(model, "base_model") and hasattr(model.base_model, "model") and hasattr(model.base_model.model, "hf_device_map"):
+        model.hf_device_map = model.base_model.model.hf_device_map
+
+    # Ensure all trainable parameters are float32 to prevent BFloat16 GradScaler conflict on T4
+    for param in model.parameters():
+        if param.dtype == torch.bfloat16 or param.requires_grad:
+            param.data = param.data.float()
+
     model.print_trainable_parameters()
 
     base_args = {
@@ -285,6 +299,8 @@ def main():
         "num_train_epochs": args.num_train_epochs,
         "per_device_train_batch_size": args.per_device_train_batch_size,
         "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "gradient_checkpointing": True,
+        "gradient_checkpointing_kwargs": {"use_reentrant": False},
         "learning_rate": args.learning_rate,
         "weight_decay": 0.01,
         "warmup_steps": 10,
@@ -294,7 +310,7 @@ def main():
         "push_to_hub": bool(args.hub_model_id and os.getenv("HF_TOKEN")),
         "hub_model_id": args.hub_model_id if args.hub_model_id else None,
         "hub_strategy": "every_save",
-        "fp16": True,
+        "fp16": False,
         "bf16": False,
         "max_grad_norm": 0.3,
         "optim": "paged_adamw_8bit",
@@ -303,6 +319,9 @@ def main():
     }
 
     sft_config_params = inspect.signature(SFTConfig.__init__).parameters
+    if "loss_type" in sft_config_params:
+        base_args["loss_type"] = "nll"
+
     if "max_length" in sft_config_params:
         base_args["max_length"] = args.max_seq_length
     elif "max_seq_length" in sft_config_params:
@@ -313,12 +332,21 @@ def main():
 
     valid_config_args = {k: v for k, v in base_args.items() if k in sft_config_params}
     training_args = SFTConfig(**valid_config_args)
+    training_args._n_gpu = 1
 
+    # Prevent AttributeError: 'functools.partial' object has no attribute '__func__' in TRL
+    try:
+        import trl.trainer.sft_trainer
+        if hasattr(trl.trainer.sft_trainer, "_patch_chunked_ce_lm_head"):
+            trl.trainer.sft_trainer._patch_chunked_ce_lm_head = lambda *a, **kw: None
+    except Exception:
+        pass
+
+    # model is already wrapped as a PeftModel, so do not pass peft_config to avoid ValueError
     sft_trainer_params = inspect.signature(SFTTrainer.__init__).parameters
     trainer_kwargs = {
         "model": model,
         "train_dataset": formatted_dataset,
-        "peft_config": peft_config,
         "args": training_args,
     }
 
@@ -360,10 +388,15 @@ def main():
         del trainer
         torch.cuda.empty_cache()
 
+        # Patch torchao bug
+        import peft.tuners.lora.torchao
+        peft.tuners.lora.torchao.dispatch_torchao = lambda *args, **kwargs: None
+
         base_model_reload = AutoModelForCausalLM.from_pretrained(
             args.base_model,
             torch_dtype=torch.float16,
             device_map="auto",
+            max_memory={i: "13GiB" for i in range(gpu_count)},
             trust_remote_code=True,
         )
         merged_model = PeftModel.from_pretrained(base_model_reload, args.output_dir)
